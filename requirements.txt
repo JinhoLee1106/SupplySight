@@ -9,3 +9,4 @@ retry-requests
 numpy
 psycopg2>=2.9.11
 anthropic==0.84.0
+beautifulsoup4>=4.12.0
