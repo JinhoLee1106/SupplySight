@@ -1,0 +1,14 @@
+# for local testing
+services:
+  db:
+    image: postgres:16
+    container_name: local_postgres
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres_data:
