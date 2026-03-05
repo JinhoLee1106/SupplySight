@@ -6,7 +6,7 @@ import requests
 import pandas as pd
 
 BASE = "https://api.census.gov/data/timeseries/intltrade/imports/hs"
-
+# from https://www.census.gov/data/developers/data-sets/international-trade.html
 class CensusError(RuntimeError):
     pass
 

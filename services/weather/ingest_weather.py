@@ -16,7 +16,7 @@ PARAMS = {
     "hourly": "sea_surface_temperature,wave_height,ocean_current_velocity,sea_level_height_msl",
     "models": "best_match",
     "start_date": "2022-01-01",
-    "end_date": "2025-01-01"
+    "end_date": "2026-01-01"
 }
 
 
