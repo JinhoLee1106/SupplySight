@@ -1,13 +1,11 @@
 # SupplySight
 ## How to Run & Test
-1. Setup Environment
-    \# Install dependencies
-    
+1. Setup Environment   
     pip install -r requirements.txt <br>
     set your CENSUS_API_KEY in .env
     > touch .env <br>
     > echo "CENSUS_API_KEY=**your_key_here**\nSHRIMP_MONTHS_BACK=**number of months you want**" > .env
-2.
+2. run data collection
   
 ## dataframe
 1. shrimp_imports.cvs:
@@ -41,7 +39,7 @@
 4. weather_monthly_summary.csv
     > summerized from 3.
     
-    - MONTH: <YYYY>-<MM>
+    - MONTH: \<YYYY\>\-\<MM\>
     - SST_MEAN: Monthly Mean Sea Surface Temperature (float .1f)
     - SST_STD: Monthly Standard Deviation of Sea Surface Temperature (float .1f)
     - WVH_MEAN: Monthly Mean Wave Height (float .2f)
