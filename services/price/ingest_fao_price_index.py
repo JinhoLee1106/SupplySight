@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 
 ROOT = Path(__file__).resolve().parents[2]
 RAW_DIR = ROOT / "database" / "raw" / "price_data" / "fao_fishpriceindex"
-PROCESSED_DIR = ROOT / "database" / "processed" / "price_data"
+PROCESSED_DIR = ROOT / "database" / "processed"
 OUT_CSV = PROCESSED_DIR / "fao_shrimp_price_index.csv"
 DEFAULT_FAO_DIR_URL = "https://www.fao.org/fishery/static/fishpriceindex/"
 OUTPUT_COLUMNS = ["date", "commodity", "value", "source", "source_file", "ingested_at"]
@@ -169,7 +169,7 @@ def extract_shrimp_series(csv_path: Path) -> pd.DataFrame:
 
     shrimp = df[["Date", "Shrimp"]].copy()
     shrimp.columns = ["date", "value"]
-    shrimp["date"] = pd.to_datetime(shrimp["date"], format="%b-%y", errors="coerce").dt.strftime("%Y-%m-01")
+    shrimp["date"] = pd.to_datetime(shrimp["date"], format="%b-%y", errors="coerce").dt.strftime("%Y-%m")
     shrimp["commodity"] = "Shrimp"
     shrimp["source"] = "FAO_FishPriceIndex"
     shrimp["source_file"] = csv_path.name

@@ -5,9 +5,11 @@ from pathlib import Path
 from datetime import datetime, timezone
 from dateutil.relativedelta import relativedelta
 import pandas as pd
+from dotenv import load_dotenv
 
 from services.census.client import HSImportsQuery, fetch_hs_imports, CensusError
 
+load_dotenv()
 ROOT = Path(__file__).resolve().parents[2]   # repo root
 RAW_DIR = ROOT / "database" / "raw" / "shrimp_imports"
 PROCESSED_DIR = ROOT / "database" / "processed"
