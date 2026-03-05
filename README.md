@@ -36,19 +36,5 @@
     - wave_height (float .2f)
     - ocean_current_velocity (float .1f)
     - sea_level_height_msl (float .2f)
-4. weather_monthly_summary.csv
-    > summerized from 3.
-    
-    - MONTH: \<YYYY\>\-\<MM\>
-    - SST_MEAN: Monthly Mean Sea Surface Temperature (float .1f)
-    - SST_STD: Monthly Standard Deviation of Sea Surface Temperature (float .1f)
-    - WVH_MEAN: Monthly Mean Wave Height (float .2f)
-    - WVH_STD: Monthly Standard Deviation of Wave Height (float .2f)
-    - WVH_MAX: Monthly Maximum Wave Height (float .2f)
-    - OCV_MEAN: Monthly Mean Ocean Current Velocity (float .1f)
-    - OCV_STD: Monthly Standard Deviation of Ocean Current Velocity (float .1f)
-    - SLHMSL_MEAN: Monthly Mean Sea Level Height relative to Mean Sea Level (float .2f)
-    - SLHMSL_STD: Monthly Standard Deviation of Sea Level Height relative to Mean Sea Level (float .2f)
-    - N_OBS: Number of Hourly Observations Used in Monthly Aggregation (Int)
 4. news
     tbc
