@@ -10,7 +10,7 @@
 ## dataframe
 1. shrimp_imports.cvs:
     >https://www.census.gov/data/developers/data-sets/international-trade.html<br>
-    https://www.censu..gov/foreign-trade/reference/guides/Guide_to_International_Trade_Datasets.pdf
+    https://www.census.gov/foreign-trade/reference/guides/Guide_to_International_Trade_Datasets.pdf
     
     - I_COMMODITY: 2, 4, 6, or 10 character Import Harmonized System Code (String)
     - I_COMMODITY_SDESC: 50 character Import Harmonized Code Description (String)
