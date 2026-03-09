@@ -5,8 +5,48 @@
     set your CENSUS_API_KEY in .env
     > touch .env <br>
     > echo "CENSUS_API_KEY=**your_key_here**\nSHRIMP_MONTHS_BACK=**number of months you want**" > .env
+
+
+## High-level overview of each data pipeline
+
+### Shrimp imports (Census)
+- **Goal:** Build a monthly history of US shrimp import volumes by product.  
+- **What it does:**
+  - Calls the US Census trade API for shrimp-related HS codes.
+  - Collects monthly values and weights (total, vessel, container, air) plus product descriptions.
+  - Cleans the data, removes duplicates, and appends new months to the existing history.
+  - Writes a timestamped raw snapshot to `database/raw/shrimp_imports/` and an up-to-date processed file `database/processed/shrimp_imports.csv`.
+- **Why it matters:** This is the core **supply signal** (how much shrimp actually arrived) that everything else is built around.
+
+### FAO shrimp price index
+- **Goal:** Add a standardized price signal that reflects the global demand–supply balance for shrimp.  
+- **What it does:**
+  - Downloads the FAO shrimp price index from a configured source URL.
+  - Normalizes dates and keeps key metadata (commodity name, source, source file, ingestion timestamp).
+  - Produces `database/processed/fao_shrimp_price_index.csv`.
+- **Why it matters:** Prices help explain and predict supply changes; they summarize tight vs loose market conditions.
+
+### Ocean weather
+- **Goal:** Capture environmental conditions that affect shrimp production and catch.  
+- **What it does:**
+  - Calls the Open-Meteo API for ocean variables such as sea-surface temperature, wave height, currents, and sea level.
+  - Stores hourly data in `database/processed/weather_hourly.csv`.
+  - Aggregates that data to monthly features (e.g. average temperature, max wave height) in `database/processed/weather_features.csv`.
+- **Why it matters:** Ocean and weather conditions are leading indicators for future shrimp availability.
+
+### News (market and disruption signals)
+- **Goal:** Track qualitative signals about shrimp markets, disruptions, and sentiment.  
+- **What it does:**
+  - Uses NewsAPI to fetch recent shrimp-related articles.
+  - Stores raw articles in Postgres for durability and recovery.
+  - Uses Claude (Anthropic) to transform raw text into structured summaries and tags, then loads them back into Postgres.
+- **Why it matters:** News can capture shocks and structural changes (policy, disease, logistics) that don’t immediately appear in prices or volumes but affect future supply risk.
+
+
+
 2. run data collection
   
+
 ## dataframe
 1. shrimp_imports.cvs:
     >https://www.census.gov/data/developers/data-sets/international-trade.html<br>
@@ -38,3 +78,4 @@
     - sea_level_height_msl (float .2f)
 4. news
     tbc
+
