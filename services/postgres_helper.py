@@ -3,7 +3,7 @@ from psycopg2.extras import execute_values
 import psycopg2
 
 
-class Loader:
+class PostgresHelper:
     '''
     To write structured data into the database
     '''
@@ -37,6 +37,7 @@ class Loader:
     def close(self):
         '''
         Terminate connections to the database
+        MUST run at the end
 
         Returns
         None

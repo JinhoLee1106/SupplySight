@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, UTC
 from dotenv import load_dotenv
-from services.news.load import Loader
+from services.postgres_helper import PostgresHelper
 from services.news.db_setup import set_up
 from services.news.transform import generate_structured_news
 from anthropic import AsyncAnthropic
@@ -12,10 +12,11 @@ import os
 
 load_dotenv()
 newsapi_api_key = os.getenv("NEWSAPI_API_KEY")
+claude_api_key = os.getenv("CLAUDE_API_KEY")
 db_host = os.getenv("POSTGRES_HOST")
 db_username = os.getenv("POSTGRES_USER")
 db_password = os.getenv("POSTGRES_PASSWORD")
-claude_api_key = os.getenv("CLAUDE_API_KEY")
+db_name = os.getenv("POSTGRES_DB")
 
 base_url = "https://newsapi.org/v2/everything"
 model = "claude-haiku-4-5"
@@ -63,7 +64,7 @@ def store_raw_news(params: dict)-> list:
         print("No news to write")
         return
     
-    loader = Loader(db_host, db_username, db_password, 5432, "SUPPLYSIGHT")
+    loader = PostgresHelper(db_host, db_username, db_password, 5432, db_name)
     try:
         loader.update_table("rawnews", raw_news, primary_key="uuid")
         print(f"{len(raw_news)} articles wrote to rawnews")
@@ -81,7 +82,7 @@ def get_raw_news()-> list:
     '''
     table = []
     try:
-        reader = Loader(db_host, db_username, db_password, 5432, "SUPPLYSIGHT")
+        reader = PostgresHelper(db_host, db_username, db_password, 5432, db_name)
         filter = {"processed": False}
         filter["source"] = "Fox News"
         sort = {"publishedAt": False}
@@ -123,7 +124,7 @@ async def process_raw_news(raw_news):
         structured["products"] = eval.get("affected_products")
         to_news.append(structured)
 
-    writer = Loader(db_host, db_username, db_password, 5432, "SUPPLYSIGHT")
+    writer = PostgresHelper(db_host, db_username, db_password, 5432, db_name)
     try:
         if to_news:
             writer.update_table("news", to_news, primary_key="uuid")

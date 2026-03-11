@@ -15,4 +15,6 @@ database/processed/
 # Exclude local environment
 venv/
 .env
+.env.prod
+.env.loc
 

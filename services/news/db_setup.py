@@ -1,4 +1,4 @@
-from services.news.load import Loader
+from services.postgres_helper import PostgresHelper
 from dotenv import load_dotenv
 import os
 
@@ -11,7 +11,7 @@ base_url = "https://newsapi.org/v2/everything"
 
 def set_up():
     try:
-        db_creater = Loader(db_host, db_username, db_password, 5432)
+        db_creater = PostgresHelper(db_host, db_username, db_password, 5432)
         db_creater.create_database("SUPPLYSIGHT")
     except Exception as e:
         print(e)
@@ -20,7 +20,7 @@ def set_up():
             db_creater.close()
 
     try:
-        table_creator = Loader(db_host, db_username, db_password, 5432, "SUPPLYSIGHT")
+        table_creator = PostgresHelper(db_host, db_username, db_password, 5432, "SUPPLYSIGHT")
 
         raw_news_table_format = {
             "uuid": "TEXT PRIMARY KEY",
