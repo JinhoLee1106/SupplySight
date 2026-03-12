@@ -17,6 +17,11 @@ OUT_CSV = PROCESSED_DIR / "shrimp_imports.csv"
 
 FIELDS = ["I_COMMODITY", "I_COMMODITY_SDESC", "GEN_VAL_MO", "VES_WGT_MO", "CNT_WGT_MO", "AIR_WGT_MO"]
 
+# 6-digit HS codes for shrimp that we care about.
+# 030616 = certain frozen shrimp/prawns
+# 030617 = other frozen shrimp/prawns
+TARGET_HS_CODES = ["030616", "030617"]
+
 def month_str(dt: datetime) -> str:
     return dt.strftime("%Y-%m")
 
@@ -43,23 +48,39 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
         if col in out.columns:
             out[col] = pd.to_numeric(out[col], errors="coerce")
     out = out.dropna(subset=["GEN_VAL_MO"], how="any")
-    out = out.sort_values("MONTH").drop_duplicates(subset=["MONTH"], keep="last")
+    # Keep one row per (commodity, month) pair; allow multiple HS codes overall.
+    out = out.sort_values(["I_COMMODITY", "MONTH"]).drop_duplicates(
+        subset=["I_COMMODITY", "MONTH"], keep="last"
+    )
     out = out.reset_index(drop=True)
     return out
 
-def fetch_with_fallback(api_key: str, time_from: str, time_to: str) -> pd.DataFrame:
-    # Try 10-digit first; if empty, fall back to 6-digit
-    last_exc = None
-    for hs in ["0306170000", "030617"]:
-        q = HSImportsQuery(hs_code=hs, time_from=time_from, time_to=time_to, fields=FIELDS)
-        try:
-            df = fetch_hs_imports(q, api_key=api_key)
-            if len(df) > 0:
-                return df
-        except Exception as e:
-            last_exc = e
-            continue
-    raise CensusError(f"Failed to fetch shrimp imports. Last error: {last_exc}")
+def fetch_for_hs_codes(api_key: str, time_from: str, time_to: str) -> pd.DataFrame:
+    """
+    Fetch imports for all target HS codes.
+
+    For each 6-digit HS code, try the 10-digit version first (e.g. 0306160000),
+    then fall back to the 6-digit code (e.g. 030616). Concatenate all results.
+    """
+    all_frames: list[pd.DataFrame] = []
+    last_exc: Exception | None = None
+
+    for hs6 in TARGET_HS_CODES:
+        for hs in (f"{hs6}0000", hs6):
+            q = HSImportsQuery(hs_code=hs, time_from=time_from, time_to=time_to, fields=FIELDS)
+            try:
+                df = fetch_hs_imports(q, api_key=api_key)
+                if len(df) > 0:
+                    all_frames.append(df)
+                    break  # move to next hs6 code
+            except Exception as e:
+                last_exc = e
+                continue
+
+    if not all_frames:
+        raise CensusError(f"Failed to fetch shrimp imports for HS codes {TARGET_HS_CODES}. Last error: {last_exc}")
+
+    return pd.concat(all_frames, ignore_index=True)
 
 def run(months_back: int | None = None) -> dict:
     api_key = os.getenv("CENSUS_API_KEY", "").strip()
@@ -77,7 +98,7 @@ def run(months_back: int | None = None) -> dict:
     time_from = month_str(start_dt)
     time_to = month_str(today)
 
-    df_raw = fetch_with_fallback(api_key, time_from, time_to)
+    df_raw = fetch_for_hs_codes(api_key, time_from, time_to)
     df_clean_new = clean(df_raw)
 
     # Save raw snapshot
@@ -91,7 +112,10 @@ def run(months_back: int | None = None) -> dict:
         df_existing["MONTH"] = df_existing["MONTH"].astype(str)
 
     df_merged = pd.concat([df_existing, df_clean_new], ignore_index=True)
-    df_merged = df_merged.sort_values("MONTH").drop_duplicates(subset=["MONTH"], keep="last")
+    # Ensure we keep a single row per (commodity, month) across all HS codes.
+    df_merged = df_merged.sort_values(["I_COMMODITY", "MONTH"]).drop_duplicates(
+        subset=["I_COMMODITY", "MONTH"], keep="last"
+    )
     df_merged = df_merged.reset_index(drop=True)
 
     atomic_write_csv(df_merged, OUT_CSV)
