@@ -12,7 +12,7 @@ class CensusError(RuntimeError):
 
 @dataclass(frozen=True)
 class HSImportsQuery:
-    hs_code: str                 # "0306170000" or "030617"
+    hs_code: str                 # "030617"
     time_from: str               # "YYYY-MM"
     time_to: str                 # "YYYY-MM"
     fields: List[str]            # e.g., ["I_COMMODITY","GEN_VAL_MO","GEN_QY1_MO"]

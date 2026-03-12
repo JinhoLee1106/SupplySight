@@ -2,7 +2,7 @@
 ```mermaid
 erDiagram
     dates_shrimp {
-        TIMESTAMP(PK) date
+        DATE(PK) date
         FLOAT sea_surface_temp_india
         FLOAT sea_surface_temp_ecuador
         FLOAT sea_surface_temp_indonesia
@@ -28,16 +28,19 @@ erDiagram
     }
 
     months_shrimp {
-        TIMESTAMP(PK) date
+        DATE(PK) date
         FLOAT monthly_import
-        FLOAT average_weight
-        FLOAT average_price
-        FLOAT gdp_delta_india
-        FLOAT gdp_delta_ecuador
-        FLOAT gdp_delta_indonesia
-        FLOAT gdp_delta_vietnam
-        FLOAT gdp_delta_thailand
-        FLOAT tarrif_rate
+        FLOAT avg_unit_value_per_kg
+        FLOAT avg_air_share
+        FLOAT avg_container_ratio
+        FLOAT monthly_import_mom_pct
+        FLOAT monthly_import_yoy_pct
+        FLOAT monthly_import_roll3_avg
+        FLOAT monthly_import_roll6_avg
+        FLOAT monthly_import_roll3_std
+        FLOAT monthly_import_roll6_std
+        FLOAT monthly_import_zscore_6
+        FLOAT price_index_value
     }
 ```
 
