@@ -87,6 +87,7 @@ class PostgresHelper:
     def update_table(self, table_name, data, primary_key = None):
         '''
         Write new data into the events table
+        Overwrite on primary key conflict
 
         Parameters
         table_name (str) : name of the table to write to
@@ -115,6 +116,10 @@ class PostgresHelper:
             query = insert
 
         execute_values(self.cur, query, values)
+
+
+    def update_table_with_df(self, table_name, primary_key = None):
+        pass
 
 
     def read_table(self, table_name, filter:dict = None, sort:dict = None) -> list:

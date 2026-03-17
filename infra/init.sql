@@ -39,3 +39,20 @@ CREATE TABLE months_shrimp (
     monthly_import_zscore_6 FLOAT,
     price_index_value FLOAT
 );
+
+CREATE TABLE news (
+    id UUID PRIMARY KEY,
+    status TEXT DEFAULT 'new' CHECK (status in ('new', 'pending', 'processed')),
+    source TEXT,
+    title TEXT,
+    content TEXT,
+    url TEXT,
+    publication_date DATE
+);
+
+CREATE TABLE process_news (
+    id UUID PRIMARY KEY,
+    products TEXT[],
+    sentiment_score FLOAT,
+    processed_time TIMESTAMP
+);
