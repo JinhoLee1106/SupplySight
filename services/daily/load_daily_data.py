@@ -29,5 +29,3 @@ def load_daily(start_date: date, end_date: date):
 
     except Exception as e:
         print(e)
-
-# load_daily(date(2023, 3, 16), date(2026, 3, 16))

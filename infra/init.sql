@@ -50,9 +50,10 @@ CREATE TABLE news (
     publication_date DATE
 );
 
-CREATE TABLE process_news (
-    id UUID PRIMARY KEY,
-    products TEXT[],
-    sentiment_score FLOAT,
+CREATE TABLE evaluated_news (
+    id UUID,
+    product TEXT,
+    relevancy_score INT,
+    sentiment_score INT,
     processed_time TIMESTAMP
 );
