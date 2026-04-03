@@ -8,6 +8,8 @@ __pycache__/
 # Data directories (generated)
 database/raw/
 database/processed/
+# Any CSV under database/ (snapshots, stray files)
+database/**/*.csv
 
 # Jupyter
 .ipynb_checkpoints/

@@ -2,30 +2,18 @@
 """
 services/combined_monthly_data.py
 
-Build a monthly training dataset combining:
-- Census shrimp features (volume + engineered features)
-- FAO shrimp price index
+Build the monthly feature set for `months_shrimp` (Postgres) by combining:
+- Census shrimp features (shrimp_features.csv)
+- FAO shrimp price index (fao_shrimp_price_index.csv)
 
-Output:
-  database/processed/monthly_training_data.csv
+Primary output for loaders is `build_months_shrimp_dataframe()` (in-memory, DB-shaped).
 
-One row per MONTH with columns like:
-  MONTH,
-  monthly_import,
-  avg_unit_value_per_kg,
-  avg_air_share,
-  avg_container_ratio,
-  monthly_import_mom_pct,
-  monthly_import_yoy_pct,
-  monthly_import_roll3_avg,
-  monthly_import_roll6_avg,
-  monthly_import_roll3_std,
-  monthly_import_roll6_std,
-  monthly_import_zscore_6,
-  price_index_value
+Optional: `--write-csv` writes legacy `database/processed/monthly_training_data.csv` (MONTH
+string column) for debugging only — `months_shrimp_ingest` does not require it.
 """
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import pandas as pd
@@ -36,6 +24,23 @@ PROCESSED = ROOT / "database" / "processed"
 SHRIMP_FEATURES = PROCESSED / "shrimp_features.csv"
 PRICE_INDEX = PROCESSED / "fao_shrimp_price_index.csv"
 OUTPUT = PROCESSED / "monthly_training_data.csv"
+
+# Order matches infra/init.sql months_shrimp
+MONTHS_SHRIMP_COLUMNS = [
+    "date",
+    "monthly_import",
+    "avg_unit_value_per_kg",
+    "avg_air_share",
+    "avg_container_ratio",
+    "monthly_import_mom_pct",
+    "monthly_import_yoy_pct",
+    "monthly_import_roll3_avg",
+    "monthly_import_roll6_avg",
+    "monthly_import_roll3_std",
+    "monthly_import_roll6_std",
+    "monthly_import_zscore_6",
+    "price_index_value",
+]
 
 
 def build_monthly_from_shrimp() -> pd.DataFrame:
@@ -115,25 +120,76 @@ def load_price_index() -> pd.DataFrame:
     return df[["MONTH", "price_index_value"]]
 
 
-def main() -> None:
-    print("Building monthly training data from shrimp features and FAO price index...")
-
+def build_months_shrimp_dataframe() -> pd.DataFrame:
+    """
+    Merge shrimp features + FAO index and return a frame ready for `months_shrimp`
+    (columns match init.sql; `date` is month-start TIMESTAMP-like).
+    """
     monthly_imports = build_monthly_from_shrimp()
     price = load_price_index()
 
     combined = monthly_imports.merge(price, on="MONTH", how="left")
     combined = combined.sort_values("MONTH").reset_index(drop=True)
 
-    # Format MONTH as YYYY-MM for output
-    combined["MONTH"] = combined["MONTH"].dt.strftime("%Y-%m")
+    combined["date"] = combined["MONTH"].dt.to_period("M").dt.to_timestamp()
 
-    PROCESSED.mkdir(parents=True, exist_ok=True)
-    combined.to_csv(OUTPUT, index=False)
+    missing = [c for c in MONTHS_SHRIMP_COLUMNS if c not in combined.columns]
+    if missing:
+        raise ValueError(f"Missing expected columns for months_shrimp: {missing}")
 
-    print(f"Wrote {len(combined)} rows to {OUTPUT}")
-    print("Columns:", list(combined.columns))
+    return combined[MONTHS_SHRIMP_COLUMNS].copy()
+
+
+def monthly_training_csv_from_db_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Legacy shape: MONTH as YYYY-MM string, no `date` column."""
+    out = df.copy()
+    out.insert(0, "MONTH", pd.to_datetime(out["date"]).dt.strftime("%Y-%m"))
+    return out.drop(columns=["date"])
+
+
+def load_months_shrimp_from_legacy_csv(csv_path: Path) -> pd.DataFrame:
+    """
+    Load months_shrimp-shaped rows from legacy monthly_training_data.csv
+    (MONTH column as YYYY-MM).
+    """
+    if not csv_path.exists():
+        raise FileNotFoundError(f"Missing monthly CSV: {csv_path}")
+
+    df = pd.read_csv(csv_path)
+    if "MONTH" not in df.columns:
+        raise ValueError(f"'MONTH' column not found in {csv_path}")
+
+    df["MONTH"] = pd.to_datetime(df["MONTH"], format="%Y-%m")
+    df["date"] = df["MONTH"].dt.to_period("M").dt.to_timestamp()
+
+    missing = [c for c in MONTHS_SHRIMP_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(f"Missing expected columns in {csv_path}: {missing}")
+
+    return df[MONTHS_SHRIMP_COLUMNS].copy()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Build merged monthly shrimp + FAO dataset.",
+    )
+    parser.add_argument(
+        "--write-csv",
+        action="store_true",
+        help=f"Write optional debug CSV to {OUTPUT} (not required for Postgres ingest).",
+    )
+    args = parser.parse_args()
+
+    print("Building months_shrimp-shaped frame from shrimp_features + FAO price index...")
+    db_frame = build_months_shrimp_dataframe()
+    print(f"Built {len(db_frame)} rows; columns: {list(db_frame.columns)}")
+
+    if args.write_csv:
+        PROCESSED.mkdir(parents=True, exist_ok=True)
+        export = monthly_training_csv_from_db_frame(db_frame)
+        export.to_csv(OUTPUT, index=False)
+        print(f"Wrote {len(export)} rows to {OUTPUT}")
 
 
 if __name__ == "__main__":
     main()
-

@@ -1,4 +1,3 @@
-import types
 from pathlib import Path
 
 import pandas as pd
@@ -52,28 +51,19 @@ def test_build_monthly_and_price(tmp_path: Path) -> None:
     cmd.SHRIMP_FEATURES = shrimp_path
     cmd.PRICE_INDEX = price_path
 
-    monthly = cmd.build_monthly_from_shrimp()
-    price = cmd.load_price_index()
+    db_frame = cmd.build_months_shrimp_dataframe()
 
-    # Basic expectations
-    assert len(monthly) == 1
-    assert len(price) == 1
+    assert len(db_frame) == 1
+    assert "date" in db_frame.columns and "MONTH" not in db_frame.columns
+    assert list(db_frame.columns) == cmd.MONTHS_SHRIMP_COLUMNS
+    assert db_frame["date"].iloc[0] == pd.Timestamp("2024-01-01")
+    assert set(cmd.MONTHS_SHRIMP_COLUMNS) == set(db_frame.columns)
 
-    combined = monthly.merge(price, on="MONTH", how="left")
-    expected_cols = {
-        "MONTH",
-        "monthly_import",
-        "avg_unit_value_per_kg",
-        "avg_air_share",
-        "avg_container_ratio",
-        "monthly_import_mom_pct",
-        "monthly_import_yoy_pct",
-        "monthly_import_roll3_avg",
-        "monthly_import_roll6_avg",
-        "monthly_import_roll3_std",
-        "monthly_import_roll6_std",
-        "monthly_import_zscore_6",
-        "price_index_value",
-    }
-    assert expected_cols.issubset(set(combined.columns))
+    legacy = cmd.monthly_training_csv_from_db_frame(db_frame)
+    assert "MONTH" in legacy.columns and "date" not in legacy.columns
+    assert legacy["MONTH"].iloc[0] == "2024-01"
 
+    legacy_path = tmp_path / "monthly_training_data.csv"
+    legacy.to_csv(legacy_path, index=False)
+    roundtrip = cmd.load_months_shrimp_from_legacy_csv(legacy_path)
+    pd.testing.assert_frame_equal(roundtrip.reset_index(drop=True), db_frame.reset_index(drop=True))
