@@ -14,7 +14,11 @@ database/processed/
 
 # Exclude local environment
 venv/
+.venv/
 .env
 .env.prod
 .env.loc
+
+# Trained models (keep manifest optional; ignore heavy artifacts)
+models/*.joblib
 
