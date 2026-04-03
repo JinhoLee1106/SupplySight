@@ -2,7 +2,10 @@
 """
 services/supply_risk_db.py
 
-Postgres helpers for supply risk ML (same env vars as services.adjusted_risk).
+Postgres helpers for supply risk ML.
+
+Uses POSTGRES_HOST, POSTGRES_USER, POSTGRES_PASSWORD, optional POSTGRES_DB (default
+postgres), POSTGRES_PORT (default 5432), POSTGRES_SSLMODE (default require; empty to disable).
 """
 from __future__ import annotations
 
