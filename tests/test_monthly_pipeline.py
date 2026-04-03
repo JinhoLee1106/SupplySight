@@ -10,9 +10,8 @@ def test_build_monthly_and_price(tmp_path: Path) -> None:
     Smoke test for the monthly pipeline:
     - writes tiny shrimp_features.csv and fao_shrimp_price_index.csv
     - overrides paths in combined_monthly_data
-    - asserts basic shape and expected columns
+    - asserts months_shrimp-shaped frame
     """
-    # Prepare tiny shrimp_features.csv
     shrimp_path = tmp_path / "shrimp_features.csv"
     shrimp_df = pd.DataFrame(
         {
@@ -33,7 +32,6 @@ def test_build_monthly_and_price(tmp_path: Path) -> None:
     )
     shrimp_df.to_csv(shrimp_path, index=False)
 
-    # Prepare tiny fao_shrimp_price_index.csv
     price_path = tmp_path / "fao_shrimp_price_index.csv"
     price_df = pd.DataFrame(
         {
@@ -47,7 +45,6 @@ def test_build_monthly_and_price(tmp_path: Path) -> None:
     )
     price_df.to_csv(price_path, index=False)
 
-    # Monkey-patch module paths to point to tmp files
     cmd.SHRIMP_FEATURES = shrimp_path
     cmd.PRICE_INDEX = price_path
 
@@ -58,12 +55,3 @@ def test_build_monthly_and_price(tmp_path: Path) -> None:
     assert list(db_frame.columns) == cmd.MONTHS_SHRIMP_COLUMNS
     assert db_frame["date"].iloc[0] == pd.Timestamp("2024-01-01")
     assert set(cmd.MONTHS_SHRIMP_COLUMNS) == set(db_frame.columns)
-
-    legacy = cmd.monthly_training_csv_from_db_frame(db_frame)
-    assert "MONTH" in legacy.columns and "date" not in legacy.columns
-    assert legacy["MONTH"].iloc[0] == "2024-01"
-
-    legacy_path = tmp_path / "monthly_training_data.csv"
-    legacy.to_csv(legacy_path, index=False)
-    roundtrip = cmd.load_months_shrimp_from_legacy_csv(legacy_path)
-    pd.testing.assert_frame_equal(roundtrip.reset_index(drop=True), db_frame.reset_index(drop=True))

@@ -4,12 +4,10 @@ services/months_shrimp_ingest.py
 
 Upsert `months_shrimp` in Postgres.
 
-Default: build the table-shaped frame in memory from processed CSVs:
+Builds the table-shaped frame in memory from:
   database/processed/shrimp_features.csv
   database/processed/fao_shrimp_price_index.csv
-(see services/combined_monthly_data.build_months_shrimp_dataframe)
-
-Optional: --from-csv PATH to load a legacy monthly_training_data.csv (MONTH column).
+(see services.combined_monthly_data.build_months_shrimp_dataframe)
 
 Environment variables for DB connection:
   POSTGRES_HOST
@@ -20,20 +18,10 @@ Environment variables for DB connection:
 """
 from __future__ import annotations
 
-import argparse
 import os
-from pathlib import Path
-
-import pandas as pd
 
 from services.PostgresHelper import PostgresHelper
-from services.combined_monthly_data import (
-    build_months_shrimp_dataframe,
-    load_months_shrimp_from_legacy_csv,
-)
-
-ROOT = Path(__file__).resolve().parents[1]
-PROCESSED = ROOT / "database" / "processed"
+from services.combined_monthly_data import build_months_shrimp_dataframe
 
 
 def get_helper() -> PostgresHelper:
@@ -52,24 +40,8 @@ def get_helper() -> PostgresHelper:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Upsert months_shrimp from merged monthly data.")
-    parser.add_argument(
-        "--from-csv",
-        type=Path,
-        default=None,
-        help=(
-            "Optional path to legacy monthly_training_data.csv (MONTH + metrics). "
-            f"Default: build from shrimp_features + FAO under {PROCESSED}."
-        ),
-    )
-    args = parser.parse_args()
-
-    if args.from_csv is not None:
-        print(f"Loading months_shrimp rows from {args.from_csv}...")
-        df = load_months_shrimp_from_legacy_csv(args.from_csv)
-    else:
-        print("Building months_shrimp rows from shrimp_features + fao_shrimp_price_index...")
-        df = build_months_shrimp_dataframe()
+    print("Building months_shrimp rows from shrimp_features + fao_shrimp_price_index...")
+    df = build_months_shrimp_dataframe()
 
     records = df.to_dict(orient="records")
     if not records:
