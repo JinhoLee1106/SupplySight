@@ -1,0 +1,36 @@
+{
+    "evaluate_article_impact_on_products": 
+    {
+        "name": "evaluate_article_impact_on_products",
+        "description": "Records the relevancy score and sentiment score of an article relating to the specific products.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "evaluations": {
+                    "type": "array",
+                    "description": "A list of impact evaluations for each product found in the article.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "relevancy_score": {
+                                "type": "integer",
+                                "description": "An integer from 1 to 100 indicating how relevant the article is to the availability status of the target products. A score of 1-30 means indirect potential impact. A score of 50 means general industry/regional impact. A score of 70-100 means the product is directly mentioned with strong impact on availability." 
+                            },
+                            "sentiment_score": {
+                                "type": "integer",
+                                "description": "An integer from 1 to 100 indicating the sentiment about the availability status. 1 means the event will devastate availability (severe shortage). 50 means no expected change. 100 means the event will make the products much more available (surplus). If relevancy is below 30, default this to 50."
+                            },
+                            "product": {
+                                "type": "string",
+                                "description": "The exact name of the matched product from the target list."
+                            }
+                        },
+                        "required": ["relevancy_score", "sentiment_score", "product"] 
+                    }
+                }
+            },
+            "required": ["evaluations"] 
+        }
+    },
+    "shrimp": "<product_context_shrimp> CRITICAL IMPACT FACTORS FOR SHRIMP SUPPLY AND PRICING: * Target Regions: India, Ecuador, Indonesia, Vietnam, Thailand. * Weather & Ocean: Sea Surface Temperature (SST) anomalies, storms, cyclones, wave heights, precipitation. * Supply Chain: Oil prices, port disruptions, shipping delays, strikes. * Economics & Policy: Tariffs, trade regulations, price index trends, import weights. * Biological: Disease outbreaks in aquaculture or farms. </product_context_shrimp>"
+}

@@ -37,7 +37,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from services.postgres_helper import PostgresHelper
+from services.PostgresHelper import PostgresHelper
 
 ROOT = Path(__file__).resolve().parents[1]
 PROCESSED = ROOT / "database" / "processed"
