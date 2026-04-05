@@ -18,3 +18,5 @@ venv/
 .env.prod
 .env.loc
 
+#npm build
+Dashboard/build
