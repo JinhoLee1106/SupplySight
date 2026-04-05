@@ -8,15 +8,21 @@ __pycache__/
 # Data directories (generated)
 database/raw/
 database/processed/
+# Any CSV under database/ (snapshots, stray files)
+database/**/*.csv
 
 # Jupyter
 .ipynb_checkpoints/
 
 # Exclude local environment
 venv/
+.venv/
 .env
 .env.prod
 .env.loc
 
 #npm build
 Dashboard/build
+# Trained models (keep manifest optional; ignore heavy artifacts)
+models/*.joblib
+
