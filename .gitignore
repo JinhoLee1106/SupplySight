@@ -27,3 +27,9 @@ Dashboard/build
 # Trained models (keep manifest optional; ignore heavy artifacts)
 models/*.joblib
 
+# Frontend dashboard — install with npm; do not commit dependencies
+Dashboard/node_modules/
+Dashboard/dist/
+Dashboard/build/
+node_modules/
+
