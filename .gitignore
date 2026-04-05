@@ -23,6 +23,11 @@ venv/
 
 #npm build
 Dashboard/build
+node_modules/
+Dashboard/node_modules/
+frontend/node_modules/
+Dashboard/.vite/
+frontend/
 # Trained models (keep manifest optional; ignore heavy artifacts)
 models/*.joblib
 

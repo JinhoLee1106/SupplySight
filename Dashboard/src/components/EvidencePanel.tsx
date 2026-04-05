@@ -56,38 +56,47 @@ export function EvidencePanel({ items, loading }: EvidencePanelProps) {
       <div className="p-5 border-b border-slate-200">
         <h2 className="text-slate-900 mb-1">Risk Evidence</h2>
         <p className="text-slate-600 text-sm">
-          Signals from `dates_shrimp` until a dedicated news/evidence feed exists
+          AI-evaluated industry news · click any article to read the source
         </p>
       </div>
       <div className="p-4 space-y-3 max-h-[500px] overflow-y-auto">
         {evidenceItems.length === 0 ? (
-          <p className="text-slate-500 text-sm px-1">
-            No evidence rows — `dates_shrimp` may be empty or fields are null.
-          </p>
+          <p className="text-slate-500 text-sm px-1">No news articles available.</p>
         ) : (
           evidenceItems.map((item, index) => {
             const Icon = iconFor(item.iconType);
+            const Tag = item.url ? 'a' : 'div';
+            const linkProps = item.url
+              ? { href: item.url, target: '_blank', rel: 'noopener noreferrer' }
+              : {};
             return (
-              <div key={index} className="border border-slate-200 rounded-lg p-4 hover:border-blue-300 transition-colors">
-                <div className="flex items-start gap-3">
-                  <div className="bg-blue-50 p-2 rounded-lg flex-shrink-0">
-                    <Icon className="w-4 h-4 text-blue-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <h3 className="text-slate-900 text-sm font-medium">{item.title}</h3>
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium border flex-shrink-0 ${getImpactColor(item.impact)}`}>
-                        {item.impact}
-                      </span>
+              <Tag key={index} {...linkProps} className="block">
+                <div className="border border-slate-200 rounded-lg p-4 hover:border-blue-300 hover:bg-slate-50 transition-colors cursor-pointer">
+                  <div className="flex items-start gap-3">
+                    <div className="bg-blue-50 p-2 rounded-lg flex-shrink-0">
+                      <Icon className="w-4 h-4 text-blue-600" />
                     </div>
-                    <p className="text-slate-600 text-xs mb-2 leading-relaxed">{item.description}</p>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-blue-600">{item.source}</span>
-                      <span className="text-slate-500">{item.date}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <h3 className="text-slate-900 text-sm font-medium leading-snug">{item.title}</h3>
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium border flex-shrink-0 ${getImpactColor(item.impact)}`}>
+                          {item.impact}
+                        </span>
+                      </div>
+                      <p className="text-slate-600 text-xs mb-2 leading-relaxed">{item.description}</p>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-blue-600">{item.source}</span>
+                        <div className="flex items-center gap-2 text-slate-500">
+                          {item.relevancyScore !== undefined && (
+                            <span>Relevance {item.relevancyScore}/100</span>
+                          )}
+                          <span>{item.date}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              </Tag>
             );
           })
         )}

@@ -16,6 +16,7 @@ the UI is testable (`meta.usingPlaceholders`, `meta.placeholderSections`).
 """
 from __future__ import annotations
 
+import math
 import os
 from contextlib import contextmanager
 from datetime import date, datetime, timezone
@@ -64,22 +65,24 @@ def get_conn() -> Generator[psycopg2.extensions.connection, None, None]:
         conn.close()
 
 
-def _z_to_risk_score(z: float | None) -> tuple[int, str]:
+def _compute_risk_score(z: float | None, price: float | None) -> tuple[int, str]:
     """
-    UNCERTAIN: No formal risk model in repo. Map z-score to UI bucket + 0–100 score.
+    Mirrors supply_risk_labels.py:
+      raw = 8 * relu(-zscore_6) + 0.15 * relu(price_index - 90)
+      scaled to [0, 100]; higher = more supply stress.
+    raw_max ~16 empirically (zscore=-2 → raw=16).
     """
-    if z is None:
-        return 50, "Medium"
-    # Higher imports vs 6m norm might mean oversupply (lower risk) or noise — inverted here
-    # so that *high positive z* reads as elevated disruption risk for demo purposes.
-    score = int(max(0, min(100, round(50 + 12 * z))))
-    if score < 35:
-        return score, "Low"
-    if score < 55:
-        return score, "Medium"
-    if score < 75:
+    z_val = 0.0 if (z is None or math.isnan(z)) else z
+    p_val = 90.0 if (price is None or math.isnan(price)) else price
+    raw = 8.0 * max(0.0, -z_val) + 0.15 * max(0.0, p_val - 90.0)
+    score = int(min(100, round((raw / 16.0) * 100)))
+    if score >= 75:
+        return score, "Critical"
+    if score >= 50:
         return score, "High"
-    return score, "Critical"
+    if score >= 25:
+        return score, "Medium"
+    return score, "Low"
 
 
 def _trend_from_scores(current: int, older: int | None) -> str:
@@ -161,43 +164,17 @@ def _placeholder_trend() -> list[dict[str, Any]]:
     ]
 
 
-def _demo_non_shrimp_products() -> list[dict[str, Any]]:
-    """Demo-only rows — no SupplySight pipeline for beef/beverages yet."""
-    return [
-        {
-            "id": "PRD-002",
-            "name": "Ribeye Steak",
-            "category": "Beef",
-            "supplier": "Premium Meat Co",
-            "risk30": {"level": "Medium", "score": 15, "trend": "stable"},
-            "risk60": {"level": "Medium", "score": 17, "trend": "up"},
-            "risk90": {"level": "Medium", "score": 19, "trend": "up"},
-        },
-        {
-            "id": "PRD-003",
-            "name": "Asahi Beer",
-            "category": "Beverages",
-            "supplier": "Asahi Group Holdings",
-            "risk30": {"level": "Low", "score": 11, "trend": "down"},
-            "risk60": {"level": "Low", "score": 11, "trend": "down"},
-            "risk90": {"level": "Low", "score": 10, "trend": "down"},
-        },
-    ]
-
-
 def _placeholder_products() -> list[dict[str, Any]]:
-    """Sample product rows — 30/60/90 are illustrative, not model output."""
     return [
         {
             "id": "PRD-PLACEHOLDER-001",
-            "name": "Frozen Shrimp (placeholder)",
+            "name": "Shrimp (aggregate imports)",
             "category": "Seafood",
-            "supplier": "Pacific Harvest Ltd (placeholder)",
+            "supplier": "—",
             "risk30": {"level": "High", "score": 72, "trend": "up"},
             "risk60": {"level": "Medium", "score": 58, "trend": "stable"},
             "risk90": {"level": "Low", "score": 42, "trend": "down"},
         },
-        *_demo_non_shrimp_products(),
     ]
 
 
@@ -268,6 +245,62 @@ def _placeholder_recommendations() -> list[dict[str, Any]]:
     ]
 
 
+def _fetch_news(conn, limit: int = 10) -> list[dict[str, Any]]:
+    """Query evaluated_news JOIN news, return EvidenceItemDTO-shaped dicts."""
+    q = """
+        SELECT
+            n.title,
+            n.url,
+            n.source,
+            n.publication_date,
+            e.relevancy_score,
+            e.sentiment_score,
+            e.product
+        FROM evaluated_news e
+        JOIN news n ON n.id = e.id
+        ORDER BY n.publication_date DESC
+        LIMIT %s
+    """
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(q, (limit,))
+            rows = cur.fetchall()
+    except Exception:
+        return []
+
+    items: list[dict[str, Any]] = []
+    for r in rows:
+        sentiment = _safe_float(r.get("sentiment_score")) or 50.0
+        # sentiment_score: 1=severe shortage (bad), 100=surplus (good)
+        # <40 = Negative supply signal (bad), 40-60 = Neutral, >60 = Positive
+        if sentiment < 40:
+            impact = "High"
+        elif sentiment <= 60:
+            impact = "Medium"
+        else:
+            impact = "Low"
+
+        pub_date = r.get("publication_date")
+        if isinstance(pub_date, date):
+            pub_date = pub_date.isoformat()
+
+        product = r.get("product") or "shrimp"
+        sentiment_label = "negative supply signal" if sentiment < 40 else ("neutral" if sentiment <= 60 else "positive supply signal")
+        description = f"Sentiment: {sentiment_label} for {product} (score {int(sentiment)}/100)."
+
+        items.append({
+            "iconType": "globe",
+            "title": r.get("title") or "Untitled",
+            "description": description,
+            "source": r.get("source") or "Unknown",
+            "impact": impact,
+            "date": pub_date or "",
+            "url": r.get("url") or None,
+            "relevancyScore": int(r["relevancy_score"]) if r.get("relevancy_score") is not None else None,
+        })
+    return items
+
+
 def _full_placeholder_response(
     *,
     reason: str,
@@ -301,23 +334,129 @@ def _full_placeholder_response(
     }
 
 
+def _safe_float(v: Any) -> float | None:
+    try:
+        f = float(v)
+        return None if math.isnan(f) else f
+    except (TypeError, ValueError):
+        return None
+
+
 def _overall_risk_label(months: list[dict[str, Any]]) -> tuple[str, str]:
     if not months:
         return "Unknown", "No monthly rows in months_shrimp"
     last = months[-1]
-    _, level = _z_to_risk_score(
-        float(last["monthly_import_zscore_6"])
-        if last.get("monthly_import_zscore_6") is not None
-        else None
+    _, level = _compute_risk_score(
+        _safe_float(last.get("monthly_import_zscore_6")),
+        _safe_float(last.get("price_index_value")),
     )
-    mom = last.get("monthly_import_mom_pct")
-    sub = "Latest month z-score bucket"
+    mom = _safe_float(last.get("monthly_import_mom_pct"))
+    sub = "Based on import z-score and price index"
     if mom is not None:
-        try:
-            sub = f"MoM import change {float(mom):+.1f}% vs prior month"
-        except (TypeError, ValueError):
-            pass
+        sub = f"MoM import change {mom * 100:+.1f}% vs prior month"
     return level, sub
+
+
+def _build_recommendations(months: list[dict[str, Any]], as_of: str | None) -> list[dict[str, Any]]:
+    """Generate actionable recommendations from real risk signals — always returns at least one item."""
+    if not months:
+        return []
+
+    last = months[-1]
+    score, level = _compute_risk_score(
+        _safe_float(last.get("monthly_import_zscore_6")),
+        _safe_float(last.get("price_index_value")),
+    )
+    mom = _safe_float(last.get("monthly_import_mom_pct"))
+    mom_pct = mom * 100 if mom is not None else None
+    date_label = as_of or "latest month"
+
+    recs: list[dict[str, Any]] = []
+
+    if level == "Critical":
+        recs.append({
+            "iconType": "alert",
+            "action": "Place emergency order now",
+            "product": "Shrimp (aggregate imports)",
+            "description": (
+                f"Supply risk is Critical (score {score}/100). Import volumes are sharply below the 6-month average"
+                + (f" and fell {abs(mom_pct):.1f}% last month" if mom_pct is not None and mom_pct < 0 else "")
+                + ". Order immediately to avoid stockouts."
+            ),
+            "priority": "High",
+            "savings": "Prevents stockout",
+            "timeline": f"Act within 2 days · data as of {date_label}",
+        })
+        recs.append({
+            "iconType": "refresh",
+            "action": "Identify backup suppliers",
+            "product": "Shrimp (aggregate imports)",
+            "description": "Critical risk level suggests a supply disruption. Contact alternative suppliers to secure a contingency source.",
+            "priority": "High",
+            "savings": "Reduces single-source dependency",
+            "timeline": f"This week · data as of {date_label}",
+        })
+
+    elif level == "High":
+        recs.append({
+            "iconType": "cart",
+            "action": "Increase order quantity",
+            "product": "Shrimp (aggregate imports)",
+            "description": (
+                f"Supply risk is High (score {score}/100). Imports are below the seasonal average"
+                + (f", down {abs(mom_pct):.1f}% from last month" if mom_pct is not None and mom_pct < 0 else "")
+                + ". Ordering above your normal quantity now will provide a buffer."
+            ),
+            "priority": "High",
+            "savings": "Reduces stockout risk",
+            "timeline": f"Before next order cycle · data as of {date_label}",
+        })
+
+    elif level == "Medium":
+        if mom_pct is not None and mom_pct < -5:
+            recs.append({
+                "iconType": "clock",
+                "action": "Order slightly early this cycle",
+                "product": "Shrimp (aggregate imports)",
+                "description": (
+                    f"Risk is Medium (score {score}/100) but imports dropped {abs(mom_pct):.1f}% last month. "
+                    "No immediate shortage, but ordering a week early reduces exposure if the trend continues."
+                ),
+                "priority": "Medium",
+                "savings": "Low-cost precaution",
+                "timeline": f"This order cycle · data as of {date_label}",
+            })
+        else:
+            recs.append({
+                "iconType": "clock",
+                "action": "Maintain current order schedule",
+                "product": "Shrimp (aggregate imports)",
+                "description": (
+                    f"Risk is Medium (score {score}/100)"
+                    + (f" with imports {'+' if mom_pct >= 0 else ''}{mom_pct:.1f}% vs last month" if mom_pct is not None else "")
+                    + ". No action required — continue monitoring weekly."
+                ),
+                "priority": "Medium",
+                "savings": "No change needed",
+                "timeline": f"Review next week · data as of {date_label}",
+            })
+
+    else:  # Low
+        recs.append({
+            "iconType": "refresh",
+            "action": "No action needed",
+            "product": "Shrimp (aggregate imports)",
+            "description": (
+                f"Supply risk is Low (score {score}/100)"
+                + (f" with imports {'+' if mom_pct >= 0 else ''}{mom_pct:.1f}% vs last month" if mom_pct is not None else "")
+                + ". Supply conditions are stable. Continue regular order schedule."
+            ),
+            "priority": "Low",
+            "savings": "Stable supply",
+            "timeline": f"No immediate action · data as of {date_label}",
+        })
+
+    return recs
 
 
 def build_dashboard_payload() -> dict[str, Any]:
@@ -325,6 +464,7 @@ def build_dashboard_payload() -> dict[str, Any]:
         with get_conn() as conn:
             months = _fetch_months_shrimp(conn, limit=48)
             latest_day = _fetch_latest_dates_shrimp(conn)
+            news_items = _fetch_news(conn, limit=10)
     except psycopg2.OperationalError as e:
         return _full_placeholder_response(reason="database_unavailable", db_error=str(e))
 
@@ -336,12 +476,13 @@ def build_dashboard_payload() -> dict[str, Any]:
     as_of = months[-1]["date"] if months else None
     overall_level, overall_sub = _overall_risk_label(months)
 
-    # Trend points for chart (risk score per month from z-score)
+    # Trend points for chart
     trend_points: list[dict[str, Any]] = []
     for m in months:
-        z = m.get("monthly_import_zscore_6")
-        zf = float(z) if z is not None else None
-        score, _ = _z_to_risk_score(zf)
+        score, _ = _compute_risk_score(
+            _safe_float(m.get("monthly_import_zscore_6")),
+            _safe_float(m.get("price_index_value")),
+        )
         label = m["date"][:7] if m.get("date") else ""
         trend_points.append(
             {
@@ -352,35 +493,29 @@ def build_dashboard_payload() -> dict[str, Any]:
             }
         )
 
-    # UNCERTAIN: 30/60/90 in UI are not true forecasts — see module docstring.
+    # 30/60/90 day risk: rolling windows of monthly history as proxy
     products: list[dict[str, Any]] = []
     last3 = months[-3:]
     last6 = months[-6:]
-    s30, l30 = _z_to_risk_score(
-        float(last3[-1]["monthly_import_zscore_6"])
-        if last3[-1].get("monthly_import_zscore_6") is not None
-        else None
+
+    def _mean_score(rows: list[dict[str, Any]]) -> tuple[int, str]:
+        z_vals = [_safe_float(x.get("monthly_import_zscore_6")) for x in rows]
+        p_vals = [_safe_float(x.get("price_index_value")) for x in rows]
+        z_vals = [v for v in z_vals if v is not None]
+        p_vals = [v for v in p_vals if v is not None]
+        z_mean = sum(z_vals) / len(z_vals) if z_vals else None
+        p_mean = sum(p_vals) / len(p_vals) if p_vals else None
+        return _compute_risk_score(z_mean, p_mean)
+
+    s30, l30 = _compute_risk_score(
+        _safe_float(last3[-1].get("monthly_import_zscore_6")),
+        _safe_float(last3[-1].get("price_index_value")),
     )
-    z60_vals = [
-        float(x["monthly_import_zscore_6"])
-        for x in last3
-        if x.get("monthly_import_zscore_6") is not None
-    ]
-    z60_mean = sum(z60_vals) / len(z60_vals) if z60_vals else None
-    s60, l60 = _z_to_risk_score(z60_mean)
-
-    z90_vals = [
-        float(x["monthly_import_zscore_6"])
-        for x in last6
-        if x.get("monthly_import_zscore_6") is not None
-    ]
-    z90_mean = sum(z90_vals) / len(z90_vals) if z90_vals else None
-    s90, l90 = _z_to_risk_score(z90_mean)
-
-    s30_prev, _ = _z_to_risk_score(
-        float(last3[-2]["monthly_import_zscore_6"])
-        if len(last3) >= 2 and last3[-2].get("monthly_import_zscore_6") is not None
-        else None
+    s60, l60 = _mean_score(last3)
+    s90, l90 = _mean_score(last6)
+    s30_prev, _ = _compute_risk_score(
+        _safe_float(last3[-2].get("monthly_import_zscore_6")) if len(last3) >= 2 else None,
+        _safe_float(last3[-2].get("price_index_value")) if len(last3) >= 2 else None,
     )
     products.append(
         {
@@ -405,10 +540,14 @@ def build_dashboard_payload() -> dict[str, Any]:
             },
         }
     )
-    products.extend(_demo_non_shrimp_products())
 
-    # Alerts: no pipeline in schema — always return placeholder counts for UI testing.
-    alerts_placeholder = _placeholder_overview()[2]
+    # Alerts: no pipeline yet — show neutral "—" so no fake numbers reach users.
+    alerts_placeholder = {
+        "key": "alerts",
+        "label": "Active Alerts",
+        "value": "—",
+        "subtext": "Alert monitoring coming soon",
+    }
     placeholder_sections.append("alerts")
 
     overview = [
@@ -422,69 +561,18 @@ def build_dashboard_payload() -> dict[str, Any]:
             "key": "products",
             "label": "Monitored Products",
             "value": str(len(products)),
-            "subtext": "Live row count from months_shrimp; portfolio size TBD — " + PLACEHOLDER_NOTE,
+            "subtext": "Active products in supply risk monitoring",
         },
         alerts_placeholder,
     ]
 
-    evidence: list[dict[str, Any]] = []
-    if latest_day and latest_day.get("sentiment_score") is not None:
-        evidence.append(
-            {
-                "iconType": "trending",
-                "title": "News sentiment feature",
-                "description": f"Latest aggregated sentiment_score = {latest_day['sentiment_score']}",
-                "source": "dates_shrimp.sentiment_score",
-                "impact": "Medium",
-                "date": latest_day.get("date") or "",
-            }
-        )
-    if latest_day and latest_day.get("oil_price") is not None:
-        evidence.append(
-            {
-                "iconType": "globe",
-                "title": "Oil price (macro)",
-                "description": f"Latest oil_price = {latest_day['oil_price']}",
-                "source": "dates_shrimp.oil_price",
-                "impact": "Low",
-                "date": latest_day.get("date") or "",
-            }
-        )
+    evidence: list[dict[str, Any]] = news_items
 
-    recommendations: list[dict[str, Any]] = []
-    if months and months[-1].get("monthly_import_zscore_6") is not None:
-        z = float(months[-1]["monthly_import_zscore_6"])
-        if z >= 1.5:
-            recommendations.append(
-                {
-                    "iconType": "cart",
-                    "action": "Review supply plan",
-                    "product": "Shrimp (aggregate imports)",
-                    "description": "Import volume z-score vs 6-month history is elevated; validate with procurement.",
-                    "priority": "High",
-                    "savings": "Heuristic — replace with model output when available",
-                    "timeline": f"As of {as_of or 'latest month'}",
-                }
-            )
-        elif z <= -1.5:
-            recommendations.append(
-                {
-                    "iconType": "refresh",
-                    "action": "Monitor for oversupply",
-                    "product": "Shrimp (aggregate imports)",
-                    "description": "Import z-score is low vs recent history; confirm inventory coverage.",
-                    "priority": "Medium",
-                    "savings": "Heuristic — replace with model output when available",
-                    "timeline": f"As of {as_of or 'latest month'}",
-                }
-            )
+    recommendations = _build_recommendations(months, as_of)
 
     if not evidence:
         evidence = _placeholder_evidence()
         placeholder_sections.append("evidence")
-    if not recommendations:
-        recommendations = _placeholder_recommendations()
-        placeholder_sections.append("recommendations")
 
     return {
         "meta": {
