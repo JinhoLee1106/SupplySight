@@ -9,6 +9,14 @@ Builds the table-shaped frame in memory from:
   database/processed/fao_shrimp_price_index.csv
 (see services.combined_monthly_data.build_months_shrimp_dataframe)
 
+Full pipeline (e.g. history 2013-01 through 2026-12):
+
+1. Census: ``python -m services.census.ingest_shrimp --time-from 2013-01 --time-to 2026-12``
+   (needs ``CENSUS_API_KEY``; optional env ``SHRIMP_TIME_FROM`` / ``SHRIMP_TIME_TO``).
+2. Features: ``python -m services.census.feature_engineering``
+3. Optional: refresh FAO price CSV: ``python -m services.price.ingest_fao_price_index``
+4. This module: ``python -m services.months_shrimp_ingest``
+
 Environment variables for DB connection:
   POSTGRES_HOST
   POSTGRES_USER

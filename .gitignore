@@ -21,8 +21,9 @@ venv/
 .env.prod
 .env.loc
 
-#npm build
+# npm build
 Dashboard/build
+
 # Trained models (keep manifest optional; ignore heavy artifacts)
 models/*.joblib
 
