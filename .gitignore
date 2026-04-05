@@ -21,13 +21,15 @@ venv/
 .env.prod
 .env.loc
 
-#npm build
-Dashboard/build
+# npm build
 node_modules/
 Dashboard/node_modules/
-frontend/node_modules/
+Dashboard/dist/
+Dashboard/build/
 Dashboard/.vite/
+frontend/node_modules/
 frontend/
+
 # Trained models (keep manifest optional; ignore heavy artifacts)
 models/*.joblib
 

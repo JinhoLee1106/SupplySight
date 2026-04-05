@@ -1,5 +1,6 @@
 # services/census/ingest_shrimp.py
 from __future__ import annotations
+import argparse
 import os
 from pathlib import Path
 from datetime import datetime, timezone
@@ -24,6 +25,13 @@ TARGET_HS_CODES = ["030616", "030617"]
 
 def month_str(dt: datetime) -> str:
     return dt.strftime("%Y-%m")
+
+
+def _parse_time_from_month(s: str) -> datetime:
+    """First day of month for ``YYYY-MM``."""
+    s = s.strip()
+    d = pd.to_datetime(s, format="%Y-%m")
+    return datetime(d.year, d.month, 1)
 
 def ensure_dirs(*dirs: Path) -> None:
     for d in dirs:
@@ -82,23 +90,43 @@ def fetch_for_hs_codes(api_key: str, time_from: str, time_to: str) -> pd.DataFra
 
     return pd.concat(all_frames, ignore_index=True)
 
-def run(months_back: int | None = None) -> dict:
+def run(
+    months_back: int | None = None,
+    time_from_arg: str | None = None,
+    time_to_arg: str | None = None,
+) -> dict:
     api_key = os.getenv("CENSUS_API_KEY", "").strip()
     if not api_key:
         raise ValueError("Set CENSUS_API_KEY in your environment (or GitHub Actions secret).")
 
-    # allow override via environment variable; default to 96 months (~8 years)
     if months_back is None:
         months_back = int(os.getenv("SHRIMP_MONTHS_BACK", "96"))
+
+    # CLI wins, then env SHRIMP_TIME_FROM; otherwise rolling months_back
+    tf = (time_from_arg or "").strip() or os.getenv("SHRIMP_TIME_FROM", "").strip() or None
 
     ensure_dirs(RAW_DIR, PROCESSED_DIR)
 
     today = datetime.now(timezone.utc).replace(tzinfo=None)
-    start_dt = today - relativedelta(months=months_back)
-    time_from = month_str(start_dt)
-    time_to = month_str(today)
+    if tf:
+        start_dt = _parse_time_from_month(tf)
+        mode = "explicit"
+    else:
+        start_dt = today - relativedelta(months=months_back)
+        mode = "rolling"
+    time_from_str = month_str(start_dt)
 
-    df_raw = fetch_for_hs_codes(api_key, time_from, time_to)
+    # Latest month inclusive: CLI --time-to, env SHRIMP_TIME_TO, or current month
+    tt_end = (time_to_arg or "").strip() or os.getenv("SHRIMP_TIME_TO", "").strip() or None
+    if tt_end:
+        end_dt = _parse_time_from_month(tt_end)
+    else:
+        end_dt = today
+    if end_dt < start_dt:
+        raise ValueError("End month (--time-to / SHRIMP_TIME_TO) must be on or after start month.")
+    time_to_str = month_str(end_dt)
+
+    df_raw = fetch_for_hs_codes(api_key, time_from_str, time_to_str)
     df_clean_new = clean(df_raw)
 
     # Save raw snapshot
@@ -121,7 +149,8 @@ def run(months_back: int | None = None) -> dict:
     atomic_write_csv(df_merged, OUT_CSV)
 
     return {
-        "pulled_range": f"{time_from} to {time_to}",
+        "pulled_range": f"{time_from_str} to {time_to_str}",
+        "time_from_mode": mode,
         "rows_new_window": int(len(df_clean_new)),
         "rows_total": int(len(df_merged)),
         "raw_snapshot": str(raw_path),
@@ -130,6 +159,38 @@ def run(months_back: int | None = None) -> dict:
         "max_time": df_merged["MONTH"].max() if len(df_merged) else None,
     }
 
+def _cli() -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        description="Fetch Census shrimp HS imports and merge into database/processed/shrimp_imports.csv"
+    )
+    p.add_argument(
+        "--time-from",
+        type=str,
+        default=None,
+        metavar="YYYY-MM",
+        help="Earliest month to fetch (e.g. 2013-01). Overrides SHRIMP_MONTHS_BACK rolling window.",
+    )
+    p.add_argument(
+        "--months-back",
+        type=int,
+        default=None,
+        help="Rolling window in months (default: env SHRIMP_MONTHS_BACK or 96). Ignored if --time-from or SHRIMP_TIME_FROM is set.",
+    )
+    p.add_argument(
+        "--time-to",
+        type=str,
+        default=None,
+        metavar="YYYY-MM",
+        help="Latest month to fetch (e.g. 2026-12). Default: current month. Env: SHRIMP_TIME_TO.",
+    )
+    return p.parse_args()
+
+
 if __name__ == "__main__":
-    summary = run()
+    args = _cli()
+    summary = run(
+        months_back=args.months_back,
+        time_from_arg=args.time_from,
+        time_to_arg=args.time_to,
+    )
     print(summary)

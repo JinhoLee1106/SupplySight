@@ -5,7 +5,14 @@
     set your CENSUS_API_KEY in .env
     > touch .env <br>
     > echo "CENSUS_API_KEY=**your_key_here**\nSHRIMP_MONTHS_BACK=**number of months you want**" > .env
-
+## For frontend dashboard
+1. Setup Environment <br>
+     > docker compose -f infra/compose.yml --env-file .env up -d <br>
+     > uvicorn services.api.main:app --reload --port 8000 <br>
+     > /Dashboard % npm install <br>
+2. Run frontend <br>
+     > npm run build <br>
+     > npm run dev or npm run build to deploy <br>
 
 ## High-level overview of each data pipeline
 
