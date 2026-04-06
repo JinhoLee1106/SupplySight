@@ -52,7 +52,7 @@ export function ProductRiskTable({ products, loading }: ProductRiskTableProps) {
       <div className="p-5 border-b border-slate-200">
         <h2 className="text-slate-900 mb-1">Product Risk Forecasts</h2>
         <p className="text-slate-600 text-sm">
-          Predicted risk levels across multiple time horizons (see API comments — horizons are approximated from monthly history)
+          Predicted risk levels across 30, 60, and 90-day horizons
         </p>
       </div>
       <div className="overflow-x-auto">
@@ -71,7 +71,7 @@ export function ProductRiskTable({ products, loading }: ProductRiskTableProps) {
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-5 py-8 text-center text-slate-500 text-sm">
-                  No product rows — load `months_shrimp` or check API connection.
+                  No product data available.
                 </td>
               </tr>
             ) : (

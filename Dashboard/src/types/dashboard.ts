@@ -47,6 +47,8 @@ export interface EvidenceItemDTO {
   source: string;
   impact: string;
   date: string;
+  url?: string;
+  relevancyScore?: number;
 }
 
 export type RecommendationIconType = 'cart' | 'refresh' | 'clock' | 'alert';

@@ -54,7 +54,7 @@ export function DecisionSupportPanel({ recommendations, loading }: DecisionSuppo
     <div className="bg-white border border-slate-200 rounded-lg">
       <div className="p-5 border-b border-slate-200">
         <h2 className="text-slate-900 mb-1">Decision Support</h2>
-        <p className="text-slate-600 text-sm">Heuristic actions from latest z-score — replace when model endpoints exist</p>
+        <p className="text-slate-600 text-sm">Suggested actions based on current supply risk signals</p>
       </div>
       <div className="p-4 space-y-3 max-h-[500px] overflow-y-auto">
         {recs.length === 0 ? (

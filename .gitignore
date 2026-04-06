@@ -22,14 +22,14 @@ venv/
 .env.loc
 
 # npm build
-Dashboard/build
-
-# Trained models (keep manifest optional; ignore heavy artifacts)
-models/*.joblib
-
-# Frontend dashboard — install with npm; do not commit dependencies
+node_modules/
 Dashboard/node_modules/
 Dashboard/dist/
 Dashboard/build/
-node_modules/
+Dashboard/.vite/
+frontend/node_modules/
+frontend/
+
+# Trained models (keep manifest optional; ignore heavy artifacts)
+models/*.joblib
 
