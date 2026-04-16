@@ -1,11 +1,37 @@
 
-  # Power BI Dashboard Wireframe (Community)
+  # SupplySight Dashboard
 
-  This is a code bundle for Power BI Dashboard Wireframe (Community). The original project is available at https://www.figma.com/design/aGk6FAIvzx9t9Fo6I5cjrv/Power-BI-Dashboard-Wireframe--Community-.
+React + Vite frontend for the SupplySight supply risk monitoring system.
 
-  ## Running the code
+## Requirements
 
-  Run `npm i` to install the dependencies.
+- Node.js 18 or higher
+- npm 9 or higher
+- The FastAPI backend running on port 8000 (see root `README.md`)
 
-  Run `npm run dev` to start the development server.
+## Running the code
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Start the dev server:
+
+```bash
+npm run dev
+```
+
+Open **http://localhost:3000** in your browser.
+
+The dev server automatically proxies all `/api` requests to `http://127.0.0.1:8000`, so the FastAPI backend must be running first. See the root `README.md` for backend setup instructions.
+
+## Build for production
+
+```bash
+npm run build
+```
+
+Output goes to `build/`.
   

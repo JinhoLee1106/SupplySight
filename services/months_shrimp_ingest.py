@@ -28,6 +28,9 @@ from __future__ import annotations
 
 import os
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from services.PostgresHelper import PostgresHelper
 from services.combined_monthly_data import build_months_shrimp_dataframe
 

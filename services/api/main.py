@@ -20,7 +20,11 @@ import math
 import os
 from contextlib import contextmanager
 from datetime import date, datetime, timezone
+from pathlib import Path
 from typing import Any, Generator
+
+import joblib
+import numpy as np
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -29,6 +33,35 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 load_dotenv()
+
+# --- ML model (supply_risk_regression.joblib) ----------------------------------------
+_MODEL_DIR = Path(__file__).resolve().parents[2] / "models"
+_REGRESSION_BUNDLE: dict[str, Any] | None = None
+_BUNDLE_ERROR: str | None = None
+_BUNDLE_LOADED: bool = False
+
+
+def _get_regression_bundle() -> dict[str, Any] | None:
+    """Lazy-load and cache the regression bundle on first call."""
+    global _REGRESSION_BUNDLE, _BUNDLE_ERROR, _BUNDLE_LOADED
+    if _BUNDLE_LOADED:
+        return _REGRESSION_BUNDLE
+    _BUNDLE_LOADED = True
+    try:
+        _REGRESSION_BUNDLE = joblib.load(_MODEL_DIR / "supply_risk_regression.joblib")
+        # Inject created_utc from the manifest JSON if the bundle doesn't carry it
+        if _REGRESSION_BUNDLE.get("created_utc") is None:
+            _manifest = _MODEL_DIR / "supply_risk_manifest.json"
+            if _manifest.is_file():
+                import json as _json
+                with _manifest.open() as _f:
+                    _m = _json.load(_f)
+                _REGRESSION_BUNDLE["created_utc"] = _m.get("created_utc")
+    except Exception as exc:  # pragma: no cover
+        _BUNDLE_ERROR = str(exc)
+    return _REGRESSION_BUNDLE
+
+# -------------------------------------------------------------------------------------
 
 app = FastAPI(title="SupplySight Dashboard API", version="0.1.0")
 
@@ -85,6 +118,80 @@ def _compute_risk_score(z: float | None, price: float | None) -> tuple[int, str]
     return score, "Low"
 
 
+def _score_to_level(score: int) -> str:
+    if score >= 75:
+        return "Critical"
+    if score >= 50:
+        return "High"
+    if score >= 25:
+        return "Medium"
+    return "Low"
+
+
+# Maps bundle m_feature_names → months_shrimp DB column names
+_M_COL_MAP: dict[str, str] = {
+    "m__monthly_import": "monthly_import",
+    "m__monthly_import_zscore_6": "monthly_import_zscore_6",
+    "m__monthly_import_yoy_pct": "monthly_import_yoy_pct",
+    "m__monthly_import_mom_pct": "monthly_import_mom_pct",
+    "m__monthly_import_roll3_std": "monthly_import_roll3_std",
+    "m__price_index_value": "price_index_value",
+}
+
+
+def _model_predict_score(row: dict[str, Any]) -> tuple[int, str] | None:
+    """Score a months_shrimp row with the regression bundle. Returns None on any failure."""
+    bundle = _get_regression_bundle()
+    if bundle is None:
+        return None
+    try:
+        import warnings
+        import pandas as pd
+        from services.supply_risk_training.supply_risk_labels import (
+            daily_adjustment_oil_sentiment_batch,
+        )
+        m_names: list[str] = bundle["m_feature_names"]
+        d_names: list[str] = bundle["d_feature_names"]
+        nm, nd = len(m_names), len(d_names)
+        m_vals = [_safe_float(row.get(_M_COL_MAP.get(n, n))) for n in m_names]
+        X_full = np.array([m_vals + [float("nan")] * nd], dtype=float)
+        # Pass a named DataFrame so the imputer (fitted with feature names) doesn't warn
+        Xm_df = pd.DataFrame(X_full[:, :nm], columns=m_names)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            Xm = bundle["imputer_month"].transform(Xm_df)
+        X = X_full  # keep full array for d_block slice below
+        monthly_risk = float(bundle["rf_month"].predict(Xm)[0])
+        dc = float(bundle.get("delta_clip", 15.0))
+        if bundle.get("architecture") == "monthly_plus_formula_adjustment":
+            delta = float(
+                daily_adjustment_oil_sentiment_batch(
+                    X[:, nm:],
+                    bundle["formula_meta"],
+                    bundle.get("d_oil_ix"),
+                    bundle.get("d_sent_ix"),
+                    delta_clip=dc,
+                )[0]
+            )
+        else:
+            delta = 0.0
+        score = int(round(min(100.0, max(1.0, monthly_risk + delta))))
+        return score, _score_to_level(score)
+    except Exception:
+        return None
+
+
+def _score_row(row: dict[str, Any]) -> tuple[int, str]:
+    """Score a months_shrimp row: ML model when available, else heuristic fallback."""
+    result = _model_predict_score(row)
+    if result is not None:
+        return result
+    return _compute_risk_score(
+        _safe_float(row.get("monthly_import_zscore_6")),
+        _safe_float(row.get("price_index_value")),
+    )
+
+
 def _trend_from_scores(current: int, older: int | None) -> str:
     if older is None:
         return "stable"
@@ -98,7 +205,7 @@ def _trend_from_scores(current: int, older: int | None) -> str:
 def _fetch_months_shrimp(conn, limit: int = 48) -> list[dict[str, Any]]:
     q = """
         SELECT date, monthly_import, monthly_import_zscore_6, price_index_value,
-               monthly_import_mom_pct, monthly_import_yoy_pct
+               monthly_import_mom_pct, monthly_import_yoy_pct, monthly_import_roll3_std
         FROM months_shrimp
         ORDER BY date DESC
         LIMIT %s
@@ -346,10 +453,7 @@ def _overall_risk_label(months: list[dict[str, Any]]) -> tuple[str, str]:
     if not months:
         return "Unknown", "No monthly rows in months_shrimp"
     last = months[-1]
-    _, level = _compute_risk_score(
-        _safe_float(last.get("monthly_import_zscore_6")),
-        _safe_float(last.get("price_index_value")),
-    )
+    _, level = _score_row(last)
     mom = _safe_float(last.get("monthly_import_mom_pct"))
     sub = "Based on import z-score and price index"
     if mom is not None:
@@ -363,10 +467,7 @@ def _build_recommendations(months: list[dict[str, Any]], as_of: str | None) -> l
         return []
 
     last = months[-1]
-    score, level = _compute_risk_score(
-        _safe_float(last.get("monthly_import_zscore_6")),
-        _safe_float(last.get("price_index_value")),
-    )
+    score, level = _score_row(last)
     mom = _safe_float(last.get("monthly_import_mom_pct"))
     mom_pct = mom * 100 if mom is not None else None
     date_label = as_of or "latest month"
@@ -479,10 +580,7 @@ def build_dashboard_payload() -> dict[str, Any]:
     # Trend points for chart
     trend_points: list[dict[str, Any]] = []
     for m in months:
-        score, _ = _compute_risk_score(
-            _safe_float(m.get("monthly_import_zscore_6")),
-            _safe_float(m.get("price_index_value")),
-        )
+        score, _ = _score_row(m)
         label = m["date"][:7] if m.get("date") else ""
         trend_points.append(
             {
@@ -499,24 +597,14 @@ def build_dashboard_payload() -> dict[str, Any]:
     last6 = months[-6:]
 
     def _mean_score(rows: list[dict[str, Any]]) -> tuple[int, str]:
-        z_vals = [_safe_float(x.get("monthly_import_zscore_6")) for x in rows]
-        p_vals = [_safe_float(x.get("price_index_value")) for x in rows]
-        z_vals = [v for v in z_vals if v is not None]
-        p_vals = [v for v in p_vals if v is not None]
-        z_mean = sum(z_vals) / len(z_vals) if z_vals else None
-        p_mean = sum(p_vals) / len(p_vals) if p_vals else None
-        return _compute_risk_score(z_mean, p_mean)
+        scores = [_score_row(x)[0] for x in rows]
+        avg = int(round(sum(scores) / len(scores))) if scores else 50
+        return avg, _score_to_level(avg)
 
-    s30, l30 = _compute_risk_score(
-        _safe_float(last3[-1].get("monthly_import_zscore_6")),
-        _safe_float(last3[-1].get("price_index_value")),
-    )
+    s30, l30 = _score_row(last3[-1])
     s60, l60 = _mean_score(last3)
     s90, l90 = _mean_score(last6)
-    s30_prev, _ = _compute_risk_score(
-        _safe_float(last3[-2].get("monthly_import_zscore_6")) if len(last3) >= 2 else None,
-        _safe_float(last3[-2].get("price_index_value")) if len(last3) >= 2 else None,
-    )
+    s30_prev, _ = _score_row(last3[-2]) if len(last3) >= 2 else (s30, l30)
     products.append(
         {
             "id": "PRD-SHRIMP-001",
@@ -574,6 +662,7 @@ def build_dashboard_payload() -> dict[str, Any]:
         evidence = _placeholder_evidence()
         placeholder_sections.append("evidence")
 
+    _bundle = _get_regression_bundle()
     return {
         "meta": {
             "asOf": as_of,
@@ -581,6 +670,9 @@ def build_dashboard_payload() -> dict[str, Any]:
             "generatedAt": datetime.now(timezone.utc).isoformat(),
             "usingPlaceholders": bool(placeholder_sections),
             "placeholderSections": placeholder_sections,
+            "modelUsed": "supply_risk_regression" if _bundle is not None else "heuristic",
+            "modelVersion": str(_bundle.get("model_version", "")) if _bundle is not None else None,
+            "modelAsOf": _bundle.get("created_utc") if _bundle is not None else None,
         },
         "overview": overview,
         "products": products,

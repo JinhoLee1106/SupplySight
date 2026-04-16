@@ -72,5 +72,15 @@ def fetch_hs_imports(query: HSImportsQuery, api_key: str, timeout: int = 30) -> 
     if "YEAR" in df.columns and "MONTH" in df.columns:
         df["MONTH"] = df["YEAR"].astype(str) + "-" + df["MONTH"].astype(str).str.zfill(2)
         df = df.drop(columns=["YEAR"])  # Drop original YEAR column after combining
-    
+
+    # Keep only rows that exactly match the queried HS code.
+    # The Census API strips leading zeros from I_COMMODITY in the response
+    # (e.g. querying "030616" returns I_COMMODITY="30616"), and for the most
+    # recent complete month it also returns 8- and 10-digit sub-code rows
+    # alongside the aggregate.  Normalise both sides with lstrip("0") so that
+    # "030616" == "30616" but "03061600" != "30616".
+    if "I_COMMODITY" in df.columns:
+        queried_norm = query.hs_code.lstrip("0") or "0"
+        df = df[df["I_COMMODITY"].astype(str).str.lstrip("0") == queried_norm]
+
     return df
