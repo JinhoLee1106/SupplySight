@@ -1,18 +1,59 @@
 # SupplySight
-## How to Run & Test
-1. Setup Environment   
-    pip install -r requirements.txt <br>
-    set your CENSUS_API_KEY in .env
-    > touch .env <br>
-    > echo "CENSUS_API_KEY=**your_key_here**\nSHRIMP_MONTHS_BACK=**number of months you want**" > .env
-## For frontend dashboard
-1. Setup Environment <br>
-     > docker compose -f infra/compose.yml --env-file .env up -d <br>
-     > uvicorn services.api.main:app --reload --port 8000 <br>
-     > /Dashboard % npm install <br>
-2. Run frontend <br>
-     > npm run build <br>
-     > npm run dev or npm run build to deploy <br>
+
+## Requirements
+
+- Python 3.10 or higher
+- Node.js 18 or higher, npm 9 or higher
+## Setup
+
+### 1. Create your `.env` file (repo root)
+
+The database is hosted on Supabase — credentials were shared by Chenyue in the group chat. Ask Valentina for the `CENSUS_API_KEY`.
+
+```
+PGHOST=aws-0-us-west-2.pooler.supabase.com
+PGPORT=5432
+POSTGRES_USER=postgres.zgtpholoddoruumqtfeu
+POSTGRES_PASSWORD=<see group chat>
+POSTGRES_DB=supplysight
+CENSUS_API_KEY=<ask Valentina>
+SHRIMP_MONTHS_BACK=12
+```
+
+No Docker or local database setup needed — the DB is already running in the cloud.
+
+### 2. Get the ML model files
+
+The trained model files are **not stored in git** (they're large binary artifacts). Ask **Vasili** to send you the following two files and place them in the `models/` folder at the repo root:
+
+```
+models/supply_risk_regression.joblib
+models/supply_risk_classifier.joblib
+```
+
+### 3. Install Python dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Start the FastAPI backend (run from repo root)
+
+```bash
+uvicorn services.api.main:app --reload --port 8000
+```
+
+Keep this terminal open — the frontend proxies all `/api` requests to it.
+
+### 5. Install frontend dependencies and start the dev server
+
+```bash
+cd Dashboard
+npm install
+npm run dev
+```
+
+Open **http://localhost:3000** in your browser.
 
 ## High-level overview of each data pipeline
 

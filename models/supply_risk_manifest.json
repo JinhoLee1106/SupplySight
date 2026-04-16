@@ -21,9 +21,9 @@
   "monthly_head": "linear_regression_scaled",
   "train_head": "both",
   "monthly_classifier_kind": "random_forest",
-  "regression_model_path": "/Users/vasilifovos/Desktop/capstoneR/SupplySight/models/supply_risk_regression.joblib",
-  "classifier_model_path": "/Users/vasilifovos/Desktop/capstoneR/SupplySight/models/supply_risk_classifier.joblib",
-  "model_path": "/Users/vasilifovos/Desktop/capstoneR/SupplySight/models/supply_risk_rf.joblib",
+  "regression_model_path": "models/supply_risk_regression.joblib",
+  "classifier_model_path": "models/supply_risk_classifier.joblib",
+  "model_path": null,
   "feature_names": [
     "m__monthly_import",
     "m__monthly_import_zscore_6",

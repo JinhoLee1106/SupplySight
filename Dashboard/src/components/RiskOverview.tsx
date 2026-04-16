@@ -1,3 +1,4 @@
+import { Link } from 'react-router';
 import { AlertTriangle, Package, Bell } from 'lucide-react';
 import type { OverviewMetricDTO } from '../types/dashboard';
 
@@ -88,18 +89,39 @@ export function RiskOverview({ metrics, loading }: RiskOverviewProps) {
     <div className="grid grid-cols-3 gap-4">
       {metrics.map((metric) => {
         const { Icon, color, bgColor, borderColor } = metricVisual(metric);
-        return (
-          <div key={metric.key} className={`bg-white border ${borderColor} rounded-lg p-5`}>
+        const inner = (
+          <>
             <div className="flex items-start justify-between mb-3">
               <div className={`${bgColor} p-2 rounded-lg`}>
                 <Icon className={`w-5 h-5 ${color}`} />
               </div>
+              {metric.key === 'risk' && (
+                <span className="text-xs text-slate-400 font-medium">View model ›</span>
+              )}
             </div>
             <div className="space-y-1">
               <p className="text-slate-600 text-sm">{metric.label}</p>
               <p className={`text-3xl font-semibold ${color}`}>{metric.value}</p>
               <p className="text-slate-500 text-xs">{metric.subtext}</p>
             </div>
+          </>
+        );
+
+        if (metric.key === 'risk') {
+          return (
+            <Link
+              key={metric.key}
+              to="/rules"
+              className={`bg-white border ${borderColor} rounded-lg p-5 block hover:shadow-md transition-shadow cursor-pointer`}
+            >
+              {inner}
+            </Link>
+          );
+        }
+
+        return (
+          <div key={metric.key} className={`bg-white border ${borderColor} rounded-lg p-5`}>
+            {inner}
           </div>
         );
       })}
