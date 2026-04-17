@@ -17,7 +17,6 @@ POSTGRES_USER=postgres.zgtpholoddoruumqtfeu
 POSTGRES_PASSWORD=<see group chat>
 POSTGRES_DB=supplysight
 CENSUS_API_KEY=<ask Valentina>
-SHRIMP_MONTHS_BACK=12
 ```
 
 No Docker or local database setup needed — the DB is already running in the cloud.
@@ -31,16 +30,26 @@ models/supply_risk_regression.joblib
 models/supply_risk_classifier.joblib
 ```
 
-### 3. Install Python dependencies
+### 3. Create and activate a virtual environment
+
+```bash
+cd SupplySight
+python3 -m venv .venv
+source .venv/bin/activate   # on Windows: .venv\Scripts\activate
+```
+
+Always make sure the virtual environment is **active** (you should see `(.venv)` in your prompt) before running any Python commands.
+
+### 4. Install Python dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Start the FastAPI backend (run from repo root)
+### 5. Start the FastAPI backend (run from repo root)
 
 ```bash
-uvicorn services.api.main:app --reload --port 8000
+python -m uvicorn services.api.main:app --reload --reload-dir services --port 8000
 ```
 
 Keep this terminal open — the frontend proxies all `/api` requests to it.
