@@ -691,6 +691,35 @@ def health() -> dict[str, str]:
 def api_dashboard() -> dict[str, Any]:
     return build_dashboard_payload()
 
+@app.get("/api/raw")
+def raw():
+    with get_conn() as conn:
+        rows = _fetch_months_shrimp(conn)
+
+        for r in rows:
+            for k, v in r.items():
+                if isinstance(v, float) and math.isnan(v):
+                    r[k] = None
+
+        return rows
+
+@app.get("/api/raw-daily")
+def raw_daily():
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+              SELECT * FROM dates_shrimp
+              ORDER BY date DESC
+            """)
+            rows = cur.fetchall()
+
+        # 🔥 NaN → None
+        for r in rows:
+            for k, v in r.items():
+                if isinstance(v, float) and math.isnan(v):
+                    r[k] = None
+
+        return rows
 
 # Run: uvicorn services.api.main:app --reload --host 0.0.0.0 --port 8000
 # (from repo root, ensure PYTHONPATH includes repo root or use `python -m uvicorn ...`)
