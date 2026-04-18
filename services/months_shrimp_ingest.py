@@ -26,13 +26,15 @@ Environment variables for DB connection:
 """
 from __future__ import annotations
 
+import argparse
 import os
 
 from dotenv import load_dotenv
 load_dotenv()
 
 from services.PostgresHelper import PostgresHelper
-from services.combined_monthly_data import build_months_shrimp_dataframe
+from services.combined_monthly_data import build_months_product_dataframe
+from services.product_config import get_product_config
 
 
 def get_helper() -> PostgresHelper:
@@ -50,19 +52,31 @@ def get_helper() -> PostgresHelper:
     return PostgresHelper(host=host, user=user, password=password, port=port, dbname=dbname)
 
 
-def main() -> None:
-    print("Building months_shrimp rows from shrimp_features + fao_shrimp_price_index...")
-    df = build_months_shrimp_dataframe()
+def _cli() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Upsert a product-specific months table in Postgres.")
+    p.add_argument(
+        "--product",
+        type=str,
+        default="shrimp",
+        help="Product to ingest. Supported: shrimp, salmon, tuna, whitefish.",
+    )
+    return p.parse_args()
+
+
+def main(product: str = "shrimp") -> None:
+    config = get_product_config(product)
+    print(f"Building {config.months_table} rows from {config.name}_features + fao_{config.name}_price_index...")
+    df = build_months_product_dataframe(config.name)
 
     records = df.to_dict(orient="records")
     if not records:
         print("No records to write; exiting.")
         return
 
-    print(f"Upserting {len(records)} rows into months_shrimp...")
+    print(f"Upserting {len(records)} rows into {config.months_table}...")
     helper = get_helper()
     try:
-        helper.update_table("months_shrimp", records, primary_key="date")
+        helper.update_table(config.months_table, records, primary_key="date")
     finally:
         helper.close()
 
@@ -70,4 +84,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    args = _cli()
+    main(product=args.product)

@@ -2,27 +2,30 @@
 """
 services/combined_monthly_data.py
 
-Build the monthly feature set for `months_shrimp` (Postgres) by combining:
-- Census shrimp features (shrimp_features.csv)
-- FAO shrimp price index (fao_shrimp_price_index.csv)
+Build a product-specific monthly feature set for ``months_<product>`` tables by
+combining:
+- Census import features (``<product>_features.csv``)
+- FAO price index (``fao_<product>_price_index.csv``)
 
-Use `build_months_shrimp_dataframe()` for an in-memory frame; `months_shrimp_ingest`
-upserts it to Postgres.
+Use ``build_months_product_dataframe(product)`` for an in-memory frame;
+``months_shrimp_ingest`` upserts it to Postgres.
 """
 from __future__ import annotations
+import argparse
 
 from pathlib import Path
 
 import pandas as pd
 
+from services.product_config import get_product_config
+
 ROOT = Path(__file__).resolve().parents[1]
 PROCESSED = ROOT / "database" / "processed"
-
 SHRIMP_FEATURES = PROCESSED / "shrimp_features.csv"
 PRICE_INDEX = PROCESSED / "fao_shrimp_price_index.csv"
 
-# Order matches infra/init.sql months_shrimp
-MONTHS_SHRIMP_COLUMNS = [
+# Order matches infra/init.sql months_* tables
+MONTHS_PRODUCT_COLUMNS = [
     "date",
     "monthly_import",
     "avg_unit_value_per_kg",
@@ -37,14 +40,26 @@ MONTHS_SHRIMP_COLUMNS = [
     "monthly_import_zscore_6",
     "price_index_value",
 ]
+MONTHS_SHRIMP_COLUMNS = MONTHS_PRODUCT_COLUMNS
 
 
-def build_monthly_from_shrimp() -> pd.DataFrame:
-    """Aggregate shrimp_features.csv to one row per MONTH."""
-    if not SHRIMP_FEATURES.exists():
-        raise FileNotFoundError(f"Missing shrimp features: {SHRIMP_FEATURES}")
+def product_paths(product: str) -> tuple[Path, Path]:
+    config = get_product_config(product)
+    if config.name == "shrimp":
+        return SHRIMP_FEATURES, PRICE_INDEX
+    return (
+        PROCESSED / f"{config.name}_features.csv",
+        PROCESSED / f"fao_{config.name}_price_index.csv",
+    )
 
-    df = pd.read_csv(SHRIMP_FEATURES)
+
+def build_monthly_from_product(product: str) -> pd.DataFrame:
+    """Aggregate product_features.csv to one row per MONTH."""
+    features_path, _ = product_paths(product)
+    if not features_path.exists():
+        raise FileNotFoundError(f"Missing product features: {features_path}")
+
+    df = pd.read_csv(features_path)
 
     # MONTH stored as YYYY-MM string
     df["MONTH"] = pd.to_datetime(df["MONTH"], format="%Y-%m")
@@ -96,52 +111,67 @@ def build_monthly_from_shrimp() -> pd.DataFrame:
     return monthly
 
 
-def load_price_index() -> pd.DataFrame:
-    """Load FAO shrimp price index and normalize columns."""
-    if not PRICE_INDEX.exists():
-        raise FileNotFoundError(f"Missing FAO price index: {PRICE_INDEX}")
+def load_price_index_for_product(product: str) -> pd.DataFrame:
+    """Load a product-specific FAO price index and normalize columns."""
+    _, price_path = product_paths(product)
+    if not price_path.exists():
+        raise FileNotFoundError(f"Missing FAO price index: {price_path}")
 
-    df = pd.read_csv(PRICE_INDEX)
+    df = pd.read_csv(price_path)
     if "date" not in df.columns or "value" not in df.columns:
         raise ValueError(
-            f"Expected 'date' and 'value' columns in {PRICE_INDEX}, got {list(df.columns)}"
+            f"Expected 'date' and 'value' columns in {price_path}, got {list(df.columns)}"
         )
 
     df["MONTH"] = pd.to_datetime(df["date"])
     df = df.rename(columns={"value": "price_index_value"})
-
-    # If there are multiple rows per month (e.g. multiple commodities), average them
     df = df.groupby("MONTH", as_index=False)["price_index_value"].mean()
 
     return df[["MONTH", "price_index_value"]]
 
 
-def build_months_shrimp_dataframe() -> pd.DataFrame:
+def build_months_product_dataframe(product: str) -> pd.DataFrame:
     """
-    Merge shrimp features + FAO index and return a frame ready for `months_shrimp`
+    Merge product features + FAO index and return a frame ready for ``months_<product>``
     (columns match init.sql; `date` is month-start TIMESTAMP-like).
     """
-    monthly_imports = build_monthly_from_shrimp()
-    price = load_price_index()
+    monthly_imports = build_monthly_from_product(product)
+    price = load_price_index_for_product(product)
 
     combined = monthly_imports.merge(price, on="MONTH", how="left")
     combined = combined.sort_values("MONTH").reset_index(drop=True)
 
     combined["date"] = combined["MONTH"].dt.to_period("M").dt.to_timestamp()
 
-    missing = [c for c in MONTHS_SHRIMP_COLUMNS if c not in combined.columns]
+    missing = [c for c in MONTHS_PRODUCT_COLUMNS if c not in combined.columns]
     if missing:
-        raise ValueError(f"Missing expected columns for months_shrimp: {missing}")
+        raise ValueError(f"Missing expected columns for months_{product}: {missing}")
 
-    return combined[MONTHS_SHRIMP_COLUMNS].copy()
+    return combined[MONTHS_PRODUCT_COLUMNS].copy()
 
 
-def main() -> None:
-    print("Building months_shrimp-shaped frame from shrimp_features + FAO price index...")
-    db_frame = build_months_shrimp_dataframe()
+def build_months_shrimp_dataframe() -> pd.DataFrame:
+    return build_months_product_dataframe("shrimp")
+
+
+def _cli() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Build a product-specific monthly dataframe.")
+    p.add_argument(
+        "--product",
+        type=str,
+        default="shrimp",
+        help="Product to build. Supported: shrimp, salmon, tuna, whitefish.",
+    )
+    return p.parse_args()
+
+
+def main(product: str = "shrimp") -> None:
+    print(f"Building months_{product}-shaped frame from {product}_features + FAO price index...")
+    db_frame = build_months_product_dataframe(product)
     print(f"Rows: {len(db_frame)}; columns: {list(db_frame.columns)}")
-    print("Upsert to Postgres with: python -m services.months_shrimp_ingest")
+    print(f"Upsert to Postgres with: python -m services.months_shrimp_ingest --product {product}")
 
 
 if __name__ == "__main__":
-    main()
+    args = _cli()
+    main(product=args.product)

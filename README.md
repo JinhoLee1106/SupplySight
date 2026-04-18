@@ -135,4 +135,3 @@ Open **http://localhost:3000** in your browser.
     - sea_level_height_msl (float .2f)
 4. news
     tbc
-

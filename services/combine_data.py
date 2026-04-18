@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROCESSED_DIR = ROOT / "database" / "processed"
 
 # Input files
+SHRIMP_IMPORTS = PROCESSED_DIR / "shrimp_imports.csv"
 SHRIMP_FEATURES = PROCESSED_DIR / "shrimp_features.csv"
 PRICE_INDEX = PROCESSED_DIR / "fao_shrimp_price_index.csv"
 WEATHER_FEATURES = PROCESSED_DIR / "weather_features.csv"
@@ -29,15 +30,16 @@ WEATHER_FEATURES = PROCESSED_DIR / "weather_features.csv"
 COMBINED_OUTPUT = PROCESSED_DIR / "combined_data.csv"
 
 
-# def load_shrimp_imports() -> pd.DataFrame:
-#     """Load shrimp imports data."""
-#     if not SHRIMP_IMPORTS.exists():
-#         print(f"Warning: {SHRIMP_IMPORTS} not found, skipping.")
-#         return pd.DataFrame()
-    
-#     df = pd.read_csv(SHRIMP_IMPORTS)
-#     df["MONTH"] = pd.to_datetime(df["MONTH"], format="%Y-%m")
-#     return df
+def load_shrimp_imports() -> pd.DataFrame:
+    """Load shrimp imports data."""
+    if not SHRIMP_IMPORTS.exists():
+        print(f"Warning: {SHRIMP_IMPORTS} not found, skipping.")
+        return pd.DataFrame()
+
+    df = pd.read_csv(SHRIMP_IMPORTS)
+    if "MONTH" in df.columns:
+        df["MONTH"] = pd.to_datetime(df["MONTH"], format="%Y-%m")
+    return df
 
 
 def load_price_index() -> pd.DataFrame:
@@ -109,6 +111,7 @@ def load_weather_features() -> pd.DataFrame:
 def combine_all_data() -> pd.DataFrame:
     """Combine all data sources into a single DataFrame."""    
     # Load all data
+    imports_df = load_shrimp_imports()
     price_df = load_price_index()
     features_df = load_shrimp_features()
     weather_df = load_weather_features()
@@ -119,7 +122,16 @@ def combine_all_data() -> pd.DataFrame:
         sys.exit(1)
     
     combined = price_df.copy()
-    
+
+    # Merge raw imports first so legacy downstream users keep access to the
+    # monthly Census value/weight columns.
+    if not imports_df.empty:
+        combined = combined.merge(
+            imports_df,
+            on="MONTH",
+            how="left"
+        )
+
     # Merge engineered features (one-to-one on MONTH and commodity)
     if not features_df.empty:
         combined = combined.merge(

@@ -9,19 +9,15 @@ import pandas as pd
 from dotenv import load_dotenv
 
 from services.census.client import HSImportsQuery, fetch_hs_imports, CensusError
+from services.product_config import ProductConfig, get_product_config
 
 load_dotenv()
 ROOT = Path(__file__).resolve().parents[2]   # repo root
-RAW_DIR = ROOT / "database" / "raw" / "shrimp_imports"
 PROCESSED_DIR = ROOT / "database" / "processed"
+RAW_DIR = ROOT / "database" / "raw" / "shrimp_imports"
 OUT_CSV = PROCESSED_DIR / "shrimp_imports.csv"
 
 FIELDS = ["I_COMMODITY", "I_COMMODITY_SDESC", "GEN_VAL_MO", "VES_WGT_MO", "CNT_WGT_MO", "AIR_WGT_MO"]
-
-# 6-digit HS codes for shrimp that we care about.
-# 030616 = certain frozen shrimp/prawns
-# 030617 = other frozen shrimp/prawns
-TARGET_HS_CODES = ["030616", "030617"]
 
 def month_str(dt: datetime) -> str:
     return dt.strftime("%Y-%m")
@@ -63,7 +59,20 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
     out = out.reset_index(drop=True)
     return out
 
-def fetch_for_hs_codes(api_key: str, time_from: str, time_to: str) -> pd.DataFrame:
+def product_paths(config: ProductConfig) -> tuple[Path, Path]:
+    if config.name == "shrimp":
+        return RAW_DIR, OUT_CSV
+    raw_dir = ROOT / "database" / "raw" / f"{config.name}_imports"
+    out_csv = PROCESSED_DIR / f"{config.name}_imports.csv"
+    return raw_dir, out_csv
+
+
+def fetch_for_hs_codes(
+    api_key: str,
+    time_from: str,
+    time_to: str,
+    hs_codes: tuple[str, ...],
+) -> pd.DataFrame:
     """
     Fetch imports for all target HS codes.
 
@@ -73,7 +82,7 @@ def fetch_for_hs_codes(api_key: str, time_from: str, time_to: str) -> pd.DataFra
     all_frames: list[pd.DataFrame] = []
     last_exc: Exception | None = None
 
-    for hs6 in TARGET_HS_CODES:
+    for hs6 in hs_codes:
         for hs in (f"{hs6}0000", hs6):
             q = HSImportsQuery(hs_code=hs, time_from=time_from, time_to=time_to, fields=FIELDS)
             try:
@@ -86,15 +95,22 @@ def fetch_for_hs_codes(api_key: str, time_from: str, time_to: str) -> pd.DataFra
                 continue
 
     if not all_frames:
-        raise CensusError(f"Failed to fetch shrimp imports for HS codes {TARGET_HS_CODES}. Last error: {last_exc}")
+        raise CensusError(f"Failed to fetch imports for HS codes {list(hs_codes)}. Last error: {last_exc}")
 
     return pd.concat(all_frames, ignore_index=True)
 
+
+def fetch_with_fallback(api_key: str, time_from: str, time_to: str) -> pd.DataFrame:
+    """Backward-compatible shrimp fetch helper used by older tests."""
+    return fetch_for_hs_codes(api_key, time_from, time_to, get_product_config("shrimp").hs_codes)
+
 def run(
+    product: str = "shrimp",
     months_back: int | None = None,
     time_from_arg: str | None = None,
     time_to_arg: str | None = None,
 ) -> dict:
+    config = get_product_config(product)
     api_key = os.getenv("CENSUS_API_KEY", "").strip()
     if not api_key:
         raise ValueError("Set CENSUS_API_KEY in your environment (or GitHub Actions secret).")
@@ -105,7 +121,8 @@ def run(
     # CLI wins, then env SHRIMP_TIME_FROM; otherwise rolling months_back
     tf = (time_from_arg or "").strip() or os.getenv("SHRIMP_TIME_FROM", "").strip() or None
 
-    ensure_dirs(RAW_DIR, PROCESSED_DIR)
+    raw_dir, out_csv = product_paths(config)
+    ensure_dirs(raw_dir, PROCESSED_DIR)
 
     today = datetime.now(timezone.utc).replace(tzinfo=None)
     if tf:
@@ -126,16 +143,19 @@ def run(
         raise ValueError("End month (--time-to / SHRIMP_TIME_TO) must be on or after start month.")
     time_to_str = month_str(end_dt)
 
-    df_raw = fetch_for_hs_codes(api_key, time_from_str, time_to_str)
+    if config.name == "shrimp":
+        df_raw = fetch_with_fallback(api_key, time_from_str, time_to_str)
+    else:
+        df_raw = fetch_for_hs_codes(api_key, time_from_str, time_to_str, config.hs_codes)
     df_clean_new = clean(df_raw)
 
     # Save raw snapshot
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    raw_path = RAW_DIR / f"shrimp_imports_snapshot_{stamp}.csv"
+    raw_path = raw_dir / f"{config.name}_imports_snapshot_{stamp}.csv"
     df_raw.to_csv(raw_path, index=False)
 
     # Merge into existing processed dataset
-    df_existing = read_csv_if_exists(OUT_CSV)
+    df_existing = read_csv_if_exists(out_csv)
     if len(df_existing) > 0:
         df_existing["MONTH"] = df_existing["MONTH"].astype(str)
 
@@ -146,22 +166,29 @@ def run(
     )
     df_merged = df_merged.reset_index(drop=True)
 
-    atomic_write_csv(df_merged, OUT_CSV)
+    atomic_write_csv(df_merged, out_csv)
 
     return {
+        "product": config.name,
         "pulled_range": f"{time_from_str} to {time_to_str}",
         "time_from_mode": mode,
         "rows_new_window": int(len(df_clean_new)),
         "rows_total": int(len(df_merged)),
         "raw_snapshot": str(raw_path),
-        "output_csv": str(OUT_CSV),
+        "output_csv": str(out_csv),
         "min_time": df_merged["MONTH"].min() if len(df_merged) else None,
         "max_time": df_merged["MONTH"].max() if len(df_merged) else None,
     }
 
 def _cli() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Fetch Census shrimp HS imports and merge into database/processed/shrimp_imports.csv"
+        description="Fetch Census seafood HS imports and merge into a product-specific processed CSV."
+    )
+    p.add_argument(
+        "--product",
+        type=str,
+        default="shrimp",
+        help="Product to ingest. Supported: shrimp, salmon, tuna, whitefish.",
     )
     p.add_argument(
         "--time-from",
@@ -189,6 +216,7 @@ def _cli() -> argparse.Namespace:
 if __name__ == "__main__":
     args = _cli()
     summary = run(
+        product=args.product,
         months_back=args.months_back,
         time_from_arg=args.time_from,
         time_to_arg=args.time_to,

@@ -40,6 +40,54 @@ CREATE TABLE months_shrimp (
     price_index_value FLOAT
 );
 
+CREATE TABLE months_salmon (
+    date DATE PRIMARY KEY,
+    monthly_import FLOAT,
+    avg_unit_value_per_kg FLOAT,
+    avg_air_share FLOAT,
+    avg_container_ratio FLOAT,
+    monthly_import_mom_pct FLOAT,
+    monthly_import_yoy_pct FLOAT,
+    monthly_import_roll3_avg FLOAT,
+    monthly_import_roll6_avg FLOAT,
+    monthly_import_roll3_std FLOAT,
+    monthly_import_roll6_std FLOAT,
+    monthly_import_zscore_6 FLOAT,
+    price_index_value FLOAT
+);
+
+CREATE TABLE months_tuna (
+    date DATE PRIMARY KEY,
+    monthly_import FLOAT,
+    avg_unit_value_per_kg FLOAT,
+    avg_air_share FLOAT,
+    avg_container_ratio FLOAT,
+    monthly_import_mom_pct FLOAT,
+    monthly_import_yoy_pct FLOAT,
+    monthly_import_roll3_avg FLOAT,
+    monthly_import_roll6_avg FLOAT,
+    monthly_import_roll3_std FLOAT,
+    monthly_import_roll6_std FLOAT,
+    monthly_import_zscore_6 FLOAT,
+    price_index_value FLOAT
+);
+
+CREATE TABLE months_whitefish (
+    date DATE PRIMARY KEY,
+    monthly_import FLOAT,
+    avg_unit_value_per_kg FLOAT,
+    avg_air_share FLOAT,
+    avg_container_ratio FLOAT,
+    monthly_import_mom_pct FLOAT,
+    monthly_import_yoy_pct FLOAT,
+    monthly_import_roll3_avg FLOAT,
+    monthly_import_roll6_avg FLOAT,
+    monthly_import_roll3_std FLOAT,
+    monthly_import_roll6_std FLOAT,
+    monthly_import_zscore_6 FLOAT,
+    price_index_value FLOAT
+);
+
 CREATE TABLE news (
     id UUID PRIMARY KEY,
     status TEXT DEFAULT 'new' CHECK (status in ('new', 'pending', 'processed')),
