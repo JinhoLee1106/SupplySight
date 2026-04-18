@@ -11,10 +11,11 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
+from services.product_config import PRODUCTS, ProductConfig
+
 ROOT = Path(__file__).resolve().parents[2]
 RAW_DIR = ROOT / "database" / "raw" / "price_data" / "fao_fishpriceindex"
 PROCESSED_DIR = ROOT / "database" / "processed"
-OUT_CSV = PROCESSED_DIR / "fao_shrimp_price_index.csv"
 DEFAULT_FAO_DIR_URL = "https://www.fao.org/fishery/static/fishpriceindex/"
 OUTPUT_COLUMNS = ["date", "commodity", "value", "source", "source_file", "ingested_at"]
 MONTH_LOOKUP = {
@@ -162,19 +163,26 @@ def download_fao_csv(url: str, filename: str, timeout: int = 30) -> Path:
         raise FAOError(f"Failed to download FAO CSV from {url}: {e}")
 
 
-def extract_shrimp_series(csv_path: Path) -> pd.DataFrame:
+def extract_product_series(csv_path: Path, config: ProductConfig) -> pd.DataFrame:
     df = pd.read_csv(csv_path, skiprows=3)
-    if "Shrimp" not in df.columns or "Date" not in df.columns:
-        raise FAOError(f"Shrimp or Date column not found in {csv_path}")
+    if config.fao_column not in df.columns or "Date" not in df.columns:
+        raise FAOError(f"{config.fao_column} or Date column not found in {csv_path}")
 
-    shrimp = df[["Date", "Shrimp"]].copy()
-    shrimp.columns = ["date", "value"]
-    shrimp["date"] = pd.to_datetime(shrimp["date"], format="%b-%y", errors="coerce").dt.strftime("%Y-%m")
-    shrimp["commodity"] = "Shrimp"
-    shrimp["source"] = "FAO_FishPriceIndex"
-    shrimp["source_file"] = csv_path.name
-    shrimp["ingested_at"] = datetime.now(timezone.utc).isoformat()
-    return shrimp[OUTPUT_COLUMNS]
+    product = df[["Date", config.fao_column]].copy()
+    product.columns = ["date", "value"]
+    product["date"] = pd.to_datetime(product["date"], format="%b-%y", errors="coerce").dt.strftime("%Y-%m")
+    product["commodity"] = config.fao_column
+    product["source"] = "FAO_FishPriceIndex"
+    product["source_file"] = csv_path.name
+    product["ingested_at"] = datetime.now(timezone.utc).isoformat()
+    return product[OUTPUT_COLUMNS]
+
+
+def extract_shrimp_series(csv_path: Path) -> pd.DataFrame:
+    """Backward-compatible helper used by older tests and callers."""
+    shrimp = extract_product_series(csv_path, PRODUCTS["shrimp"]).copy()
+    shrimp["date"] = pd.to_datetime(shrimp["date"], format="%Y-%m", errors="coerce").dt.strftime("%Y-%m-%d")
+    return shrimp
 
 
 def clean(df: pd.DataFrame) -> pd.DataFrame:
@@ -183,6 +191,10 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
     out = out.dropna(subset=["date", "value"])
     out = out.sort_values("date").drop_duplicates(subset=["date"], keep="last")
     return out.reset_index(drop=True)
+
+
+def output_csv_for_product(config: ProductConfig) -> Path:
+    return PROCESSED_DIR / f"fao_{config.name}_price_index.csv"
 
 
 def run(override_url: Optional[str] = None) -> dict:
@@ -207,27 +219,37 @@ def run(override_url: Optional[str] = None) -> dict:
     raw_path = download_fao_csv(download_url, csv_filename)
     print(f"Saved raw snapshot: {raw_path}")
 
-    df_shrimp_clean = clean(extract_shrimp_series(raw_path))
-    print(f"Extracted {len(df_shrimp_clean)} shrimp price records")
+    products_written: dict[str, str] = {}
+    rows_by_product: dict[str, int] = {}
+    for config in PRODUCTS.values():
+        try:
+            df_product_clean = clean(extract_product_series(raw_path, config))
+        except FAOError:
+            continue
 
-    if OUT_CSV.exists():
-        df_existing = pd.read_csv(OUT_CSV)
-        df_existing["date"] = df_existing["date"].astype(str)
-        df_merged = pd.concat([df_existing, df_shrimp_clean], ignore_index=True)
-    else:
-        df_merged = df_shrimp_clean
+        out_csv = output_csv_for_product(config)
+        print(f"Extracted {len(df_product_clean)} {config.name} price records")
 
-    df_merged = df_merged.sort_values("date").drop_duplicates(subset=["date"], keep="last")
-    df_merged = df_merged.reset_index(drop=True)
-    atomic_write_csv(df_merged, OUT_CSV)
-    print(f"Wrote processed CSV: {OUT_CSV}")
+        if out_csv.exists():
+            df_existing = pd.read_csv(out_csv)
+            df_existing["date"] = df_existing["date"].astype(str)
+            df_merged = pd.concat([df_existing, df_product_clean], ignore_index=True)
+        else:
+            df_merged = df_product_clean
+
+        df_merged = df_merged.sort_values("date").drop_duplicates(subset=["date"], keep="last")
+        df_merged = df_merged.reset_index(drop=True)
+        atomic_write_csv(df_merged, out_csv)
+        print(f"Wrote processed CSV: {out_csv}")
+
+        products_written[config.name] = str(out_csv)
+        rows_by_product[config.name] = int(len(df_merged))
 
     return {
         "csv_downloaded": csv_filename,
         "raw_snapshot": str(raw_path),
-        "rows_extracted": int(len(df_shrimp_clean)),
-        "rows_total": int(len(df_merged)),
-        "processed_file": str(OUT_CSV),
+        "processed_files": products_written,
+        "rows_total_by_product": rows_by_product,
     }
 
 

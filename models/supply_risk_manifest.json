@@ -2,7 +2,7 @@
   "version": "2",
   "model_version": "8",
   "architecture": "monthly_plus_formula_adjustment",
-  "created_utc": "2026-04-05T17:51:57.593554Z",
+  "created_utc": "2026-04-05T18:23:51.107827Z",
   "label_mode": "manual_baseline_adjustment",
   "label_formula": "y = clip(baseline_risk[YYYY-MM] + adjustment, 1, 100); baseline_risk = fixed monthly table; shortage = relu(-z), price_stress = relu(P - P_ref), vol = m__monthly_import_roll3_std; oil = d__oil_price, sentiment = d__sentiment_score (filled with train median before norm); P_ref = median(P) on train rows; each signal train min/max normalized to ~[0,1]; adjustment = 20 * (0.35*s + 0.25*p + 0.15*v + 0.125*oil + 0.125*sent - 0.5)",
   "label_score_min": 1.0,

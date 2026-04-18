@@ -15,21 +15,35 @@ Features implemented (per user request):
 - weight_zscore_6 handling std==0
 """
 from __future__ import annotations
+import argparse
 from pathlib import Path
 import pandas as pd
 import numpy as np
+
+from services.product_config import get_product_config
 
 ROOT = Path(__file__).resolve().parents[2]
 PROCESSED_DIR = ROOT / "database" / "processed"
 IN_CSV = PROCESSED_DIR / "shrimp_imports.csv"
 OUT_CSV = PROCESSED_DIR / "shrimp_features.csv"
 
+def product_paths(product: str) -> tuple[Path, Path]:
+    config = get_product_config(product)
+    return (
+        PROCESSED_DIR / f"{config.name}_imports.csv",
+        PROCESSED_DIR / f"{config.name}_features.csv",
+    )
 
-def main() -> None:
-    if not IN_CSV.exists():
-        raise FileNotFoundError(f"Input not found: {IN_CSV}")
 
-    df = pd.read_csv(IN_CSV)
+def main(product: str = "shrimp") -> None:
+    if product == "shrimp":
+        in_csv, out_csv = IN_CSV, OUT_CSV
+    else:
+        in_csv, out_csv = product_paths(product)
+    if not in_csv.exists():
+        raise FileNotFoundError(f"Input not found: {in_csv}")
+
+    df = pd.read_csv(in_csv)
 
     # parse and sort by commodity then month
     df["MONTH"] = pd.to_datetime(df["MONTH"], format="%Y-%m")
@@ -97,9 +111,21 @@ def main() -> None:
     out_cols = [c for c in out_cols if c in df.columns]
     df_out = df.loc[:, out_cols]
 
-    df_out.to_csv(OUT_CSV, index=False)
-    print(f"Wrote {len(df_out)} rows to {OUT_CSV}")
+    df_out.to_csv(out_csv, index=False)
+    print(f"Wrote {len(df_out)} rows to {out_csv}")
+
+
+def _cli() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Compute product-specific import features.")
+    p.add_argument(
+        "--product",
+        type=str,
+        default="shrimp",
+        help="Product to process. Supported: shrimp, salmon, tuna, whitefish.",
+    )
+    return p.parse_args()
 
 
 if __name__ == "__main__":
-    main()
+    args = _cli()
+    main(product=args.product)
