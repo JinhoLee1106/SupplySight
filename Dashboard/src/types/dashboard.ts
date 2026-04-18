@@ -80,4 +80,5 @@ export interface DashboardResponse {
   trend: TrendPointDTO[];
   evidence: EvidenceItemDTO[];
   recommendations: RecommendationDTO[];
+  anomalies?: Record<string, number>;
 }

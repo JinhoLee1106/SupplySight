@@ -25,12 +25,14 @@ from typing import Any, Generator
 
 import joblib
 import numpy as np
+import pandas as pd
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from datetime import datetime, timezone, timedelta
 
 load_dotenv()
 
@@ -566,6 +568,7 @@ def build_dashboard_payload() -> dict[str, Any]:
             months = _fetch_months_shrimp(conn, limit=48)
             latest_day = _fetch_latest_dates_shrimp(conn)
             news_items = _fetch_news(conn, limit=10)
+            anomalies = _fetch_anomalies(conn)
     except psycopg2.OperationalError as e:
         return _full_placeholder_response(reason="database_unavailable", db_error=str(e))
 
@@ -679,6 +682,7 @@ def build_dashboard_payload() -> dict[str, Any]:
         "trend": trend_points,
         "evidence": evidence,
         "recommendations": recommendations,
+        "anomalies": anomalies
     }
 
 
@@ -720,6 +724,50 @@ def raw_daily():
                     r[k] = None
 
         return rows
+    
+
+def _fetch_anomalies(conn) -> dict[str, float]:
+    today_date = datetime.now(tz = timezone.utc).date()
+    recent_earlist_date = today_date - timedelta(days = 60)
+    total_earliest_date = today_date - timedelta(days = 1095)
+
+    query = """
+        SELECT * from dates_shrimp
+        WHERE date BETWEEN %s AND %s
+        ORDER BY date ASC
+    """
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(query, (total_earliest_date, today_date))
+        rows = cur.fetchall()
+
+    if not rows:
+        return {}
+
+    df_full = pd.DataFrame(rows)
+    df_full["date"] = pd.to_datetime(df_full["date"])
+
+    df_partial = df_full[df_full["date"].between(pd.Timestamp(recent_earlist_date), pd.Timestamp(today_date))]
+
+    df_full_stats = df_full.drop("date", axis = 1).agg(["mean", "std"])
+    df_partial_stats = df_partial.drop("date", axis = 1).agg(["mean"])
+
+    df_partial_stats_T = df_partial_stats.T
+    df_partial_stats_T.rename(columns = {"mean": "val"}, inplace = True)
+
+    df_compare = pd.merge(df_full_stats.T, df_partial_stats_T, how = "inner", left_index=True, right_index=True)
+
+    res = dict()
+
+    for index, row in df_compare.iterrows():
+        try:
+            z_score = (row["val"] - row["mean"]) / row["std"]
+            if abs(z_score) > 1:
+                res[index] = z_score
+                
+        except Exception:
+            continue
+
+    return res
 
 # Run: uvicorn services.api.main:app --reload --host 0.0.0.0 --port 8000
 # (from repo root, ensure PYTHONPATH includes repo root or use `python -m uvicorn ...`)

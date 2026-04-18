@@ -4,6 +4,7 @@ import { RiskOverview } from './RiskOverview';
 import { TrendVisualization } from './TrendVisualization';
 import { EvidencePanel } from './EvidencePanel';
 import { DecisionSupportPanel } from './DecisionSupportPanel';
+import { AnomalyPanel } from './Anomalies';
 import { useDashboard } from '../hooks/useDashboard';
 
 export function Dashboard() {
@@ -71,6 +72,8 @@ export function Dashboard() {
       </div>
 
       <RiskOverview metrics={data?.overview ?? null} loading={loading} />
+
+      <AnomalyPanel anomalies={data?.anomalies} loading={loading} />
 
       <div className="grid grid-cols-3 gap-6">
         <div className="col-span-2 space-y-6">
