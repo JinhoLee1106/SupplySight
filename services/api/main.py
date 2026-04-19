@@ -717,13 +717,31 @@ def raw_daily():
             """)
             rows = cur.fetchall()
 
-        # 🔥 NaN → None
         for r in rows:
             for k, v in r.items():
                 if isinstance(v, float) and math.isnan(v):
                     r[k] = None
 
         return rows
+
+@app.get("/api/monthly")
+def get_monthly(product: str = "shrimp"):
+    table_name = f"months_{product}"
+
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(f"""
+                SELECT date, monthly_import, price_index_value
+                FROM {table_name}
+                ORDER BY date ASC
+            """)
+            rows = cur.fetchall()
+
+    for r in rows:
+        if isinstance(r["date"], date):
+            r["date"] = r["date"].isoformat()
+
+    return rows
     
 
 def _fetch_anomalies(conn) -> dict[str, float]:
