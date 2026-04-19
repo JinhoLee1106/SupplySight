@@ -5,12 +5,14 @@ export function Database() {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<"monthly" | "daily">("monthly");
 
+  const [product, setProduct] = useState("shrimp");
+
   useEffect(() => {
     setLoading(true);
 
     const url =
       mode === "monthly"
-        ? "http://127.0.0.1:8000/api/raw"
+        ? `http://127.0.0.1:8000/api/raw?product=${product}`
         : "http://127.0.0.1:8000/api/raw-daily";
 
     fetch(url)
@@ -24,21 +26,20 @@ export function Database() {
         console.error(err);
         setLoading(false);
       });
-  }, [mode]);
+
+  }, [mode, product]);
 
   if (loading) return <div className="p-6">Loading...</div>;
   if (data.length === 0) return <div className="p-6">No data</div>;
 
   const columns = Object.keys(data[0]);
 
-
-
   return (
     <div className="p-6 space-y-4">
       <h1 className="text-xl">Database (Raw)</h1>
 
+      <div className="flex gap-2 items-center">
 
-      <div className="flex gap-2">
         <button
           onClick={() => setMode("monthly")}
           className={`px-4 py-2 rounded ${
@@ -56,31 +57,46 @@ export function Database() {
         >
           Daily
         </button>
-      </div>
 
+        {mode === "monthly" && (
+          <select
+            value={product}
+            onChange={(e) => setProduct(e.target.value)}
+            className="px-3 py-2 border rounded"
+          >
+            <option value="shrimp">Shrimp</option>
+            <option value="salmon">Salmon</option>
+            <option value="tuna">Tuna</option>
+            <option value="whitefish">Whitefish</option>
+          </select>
+        )}
+
+      </div>
 
       <div className="overflow-auto border rounded">
         <table className="min-w-full text-sm">
           <thead className="bg-gray-100">
-          <tr>
-            {columns.map(col => (
+            <tr>
+              {columns.map(col => (
                 <th key={col} className="p-2 border">
                   {col}
                 </th>
-            ))}
-          </tr>
+              ))}
+            </tr>
           </thead>
 
           <tbody>
-          {data.map((row, i) => (
+            {data.map((row, i) => (
               <tr key={i}>
                 {columns.map(col => (
-                    <td key={col} className="p-2 border text-center">
-                      {row[col] ?? "-"}
-                    </td>
+                  <td key={col} className="p-2 border text-center">
+                    {typeof row[col] === "number"
+                      ? row[col].toLocaleString()
+                      : row[col] ?? "-"}
+                  </td>
                 ))}
               </tr>
-          ))}
+            ))}
           </tbody>
         </table>
       </div>

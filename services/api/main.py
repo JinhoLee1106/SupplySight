@@ -696,16 +696,23 @@ def api_dashboard() -> dict[str, Any]:
     return build_dashboard_payload()
 
 @app.get("/api/raw")
-def raw():
+def raw(product: str = "shrimp"):
+    table_name = f"months_{product}"
+
     with get_conn() as conn:
-        rows = _fetch_months_shrimp(conn)
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(f"""
+                SELECT * FROM {table_name}
+                ORDER BY date DESC
+            """)
+            rows = cur.fetchall()
 
-        for r in rows:
-            for k, v in r.items():
-                if isinstance(v, float) and math.isnan(v):
-                    r[k] = None
+    for r in rows:
+        for k, v in r.items():
+            if isinstance(v, float) and math.isnan(v):
+                r[k] = None
 
-        return rows
+    return rows
 
 @app.get("/api/raw-daily")
 def raw_daily():
