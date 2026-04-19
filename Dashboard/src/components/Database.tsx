@@ -4,21 +4,23 @@ export function Database() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<"monthly" | "daily">("monthly");
-
   const [product, setProduct] = useState("shrimp");
 
   useEffect(() => {
     setLoading(true);
+    setData([]);
 
     const url =
       mode === "monthly"
         ? `http://127.0.0.1:8000/api/raw?product=${product}`
         : "http://127.0.0.1:8000/api/raw-daily";
 
-    fetch(url)
+    console.log("FETCHING:", url);
+
+    fetch(url, { cache: "no-store" })
       .then(res => res.json())
       .then(res => {
-        console.log("DATA:", res);
+        console.log("DATA:", product, res.slice(0, 3));
         setData(res);
         setLoading(false);
       })

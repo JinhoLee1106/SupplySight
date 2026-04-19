@@ -709,7 +709,7 @@ def raw(product: str = "shrimp"):
 
     for r in rows:
         for k, v in r.items():
-            if isinstance(v, float) and math.isnan(v):
+            if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
                 r[k] = None
 
     return rows
