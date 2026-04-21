@@ -277,7 +277,7 @@ def _placeholder_products() -> list[dict[str, Any]]:
     return [
         {
             "id": "PRD-PLACEHOLDER-001",
-            "name": "Shrimp (aggregate imports)",
+            "name": "Shrimp  ",
             "category": "Seafood",
             "supplier": "—",
             "risk30": {"level": "High", "score": 72, "trend": "up"},
@@ -367,7 +367,9 @@ def _fetch_news(conn, limit: int = 10) -> list[dict[str, Any]]:
             e.product
         FROM evaluated_news e
         JOIN news n ON n.id = e.id
-        ORDER BY n.publication_date DESC
+        WHERE e.relevancy_score > 50 
+        AND n.publication_date >= NOW() - INTERVAL '60 days'
+        ORDER BY ABS(e.sentiment_score - 50) DESC, n.publication_date DESC
         LIMIT %s
     """
     try:
@@ -381,24 +383,51 @@ def _fetch_news(conn, limit: int = 10) -> list[dict[str, Any]]:
     for r in rows:
         sentiment = _safe_float(r.get("sentiment_score")) or 50.0
         # sentiment_score: 1=severe shortage (bad), 100=surplus (good)
-        # <40 = Negative supply signal (bad), 40-60 = Neutral, >60 = Positive
-        if sentiment < 40:
+        intensity = abs(sentiment - 50)
+        if sentiment < 50:
+            icon_color = "red"
+            impact = "High" if intensity >= 20 else "Medium"
+            if intensity >= 40:
+                severity_msg = "Severe shortage warning"
+            elif intensity >= 25:
+                severity_msg = "Strong shortage signal"
+            elif intensity >= 10:
+                severity_msg = "Moderate shortage concern"
+            else:
+                severity_msg = "Mild shortage concern"
+        elif sentiment > 50:
+            icon_color = "green"
+            impact = "Low"
+            if intensity >= 40:
+                severity_msg = "Strong surplus signal"
+            elif intensity >= 25:
+                severity_msg = "Strong supply improvement"
+            elif intensity >= 10:
+                severity_msg = "Moderate supply improvement"
+            else:
+                severity_msg = "Mild supply improvement"
+        else:
+            icon_color = "neutral"
+            impact = "Medium"
+            severity_msg = "Neutral supply signal"
+
+        if intensity > 30:
             impact = "High"
-        elif sentiment <= 60:
+        elif intensity > 20:
             impact = "Medium"
         else:
-            impact = "Low"
+            intensity = "Low"
 
         pub_date = r.get("publication_date")
         if isinstance(pub_date, date):
             pub_date = pub_date.isoformat()
 
         product = r.get("product") or "shrimp"
-        sentiment_label = "negative supply signal" if sentiment < 40 else ("neutral" if sentiment <= 60 else "positive supply signal")
-        description = f"Sentiment: {sentiment_label} for {product} (score {int(sentiment)}/100)."
+        description = f"{severity_msg} for {product}."
 
         items.append({
             "iconType": "globe",
+            "iconColor": icon_color,
             "title": r.get("title") or "Untitled",
             "description": description,
             "source": r.get("source") or "Unknown",
@@ -453,14 +482,15 @@ def _safe_float(v: Any) -> float | None:
 
 def _overall_risk_label(months: list[dict[str, Any]]) -> tuple[str, str]:
     if not months:
-        return "Unknown", "No monthly rows in months_shrimp"
+        return "N/A", "No monthly rows in months_shrimp"
     last = months[-1]
-    _, level = _score_row(last)
+    score, _ = _score_row(last)
+    shi = round((100 - score) / 10, 1)
     mom = _safe_float(last.get("monthly_import_mom_pct"))
     sub = "Based on import z-score and price index"
     if mom is not None:
         sub = f"MoM import change {mom * 100:+.1f}% vs prior month"
-    return level, sub
+    return str(shi), sub
 
 
 def _build_recommendations(months: list[dict[str, Any]], as_of: str | None) -> list[dict[str, Any]]:
@@ -480,9 +510,9 @@ def _build_recommendations(months: list[dict[str, Any]], as_of: str | None) -> l
         recs.append({
             "iconType": "alert",
             "action": "Place emergency order now",
-            "product": "Shrimp (aggregate imports)",
+            "product": "Shrimp  ",
             "description": (
-                f"Supply risk is Critical (score {score}/100). Import volumes are sharply below the 6-month average"
+                f"Shortage risk is Critical (Supply Health Index: {(100 - score) / 10:.1f}/10). Import volumes are sharply below the 6-month average"
                 + (f" and fell {abs(mom_pct):.1f}% last month" if mom_pct is not None and mom_pct < 0 else "")
                 + ". Order immediately to avoid stockouts."
             ),
@@ -493,7 +523,7 @@ def _build_recommendations(months: list[dict[str, Any]], as_of: str | None) -> l
         recs.append({
             "iconType": "refresh",
             "action": "Identify backup suppliers",
-            "product": "Shrimp (aggregate imports)",
+            "product": "Shrimp  ",
             "description": "Critical risk level suggests a supply disruption. Contact alternative suppliers to secure a contingency source.",
             "priority": "High",
             "savings": "Reduces single-source dependency",
@@ -504,9 +534,9 @@ def _build_recommendations(months: list[dict[str, Any]], as_of: str | None) -> l
         recs.append({
             "iconType": "cart",
             "action": "Increase order quantity",
-            "product": "Shrimp (aggregate imports)",
+            "product": "Shrimp  ",
             "description": (
-                f"Supply risk is High (score {score}/100). Imports are below the seasonal average"
+                f"Shortage risk is High (Supply Health Index: {(100 - score) / 10:.1f}/10). Imports are below the seasonal average"
                 + (f", down {abs(mom_pct):.1f}% from last month" if mom_pct is not None and mom_pct < 0 else "")
                 + ". Ordering above your normal quantity now will provide a buffer."
             ),
@@ -520,9 +550,9 @@ def _build_recommendations(months: list[dict[str, Any]], as_of: str | None) -> l
             recs.append({
                 "iconType": "clock",
                 "action": "Order slightly early this cycle",
-                "product": "Shrimp (aggregate imports)",
+                "product": "Shrimp  ",
                 "description": (
-                    f"Risk is Medium (score {score}/100) but imports dropped {abs(mom_pct):.1f}% last month. "
+                    f"Risk is Medium (Supply Health Index: {(100 - score) / 10:.1f}/10) but imports dropped {abs(mom_pct):.1f}% last month. "
                     "No immediate shortage, but ordering a week early reduces exposure if the trend continues."
                 ),
                 "priority": "Medium",
@@ -533,9 +563,9 @@ def _build_recommendations(months: list[dict[str, Any]], as_of: str | None) -> l
             recs.append({
                 "iconType": "clock",
                 "action": "Maintain current order schedule",
-                "product": "Shrimp (aggregate imports)",
+                "product": "Shrimp  ",
                 "description": (
-                    f"Risk is Medium (score {score}/100)"
+                    f"Risk is Medium (Supply Health Index: {(100 - score) / 10:.1f}/10)"
                     + (f" with imports {'+' if mom_pct >= 0 else ''}{mom_pct:.1f}% vs last month" if mom_pct is not None else "")
                     + ". No action required — continue monitoring weekly."
                 ),
@@ -548,9 +578,9 @@ def _build_recommendations(months: list[dict[str, Any]], as_of: str | None) -> l
         recs.append({
             "iconType": "refresh",
             "action": "No action needed",
-            "product": "Shrimp (aggregate imports)",
+            "product": "Shrimp  ",
             "description": (
-                f"Supply risk is Low (score {score}/100)"
+                f"Shortage risk is Low (Supply Health Index: {(100 - score) / 10:.1f}/10)"
                 + (f" with imports {'+' if mom_pct >= 0 else ''}{mom_pct:.1f}% vs last month" if mom_pct is not None else "")
                 + ". Supply conditions are stable. Continue regular order schedule."
             ),
@@ -611,7 +641,7 @@ def build_dashboard_payload() -> dict[str, Any]:
     products.append(
         {
             "id": "PRD-SHRIMP-001",
-            "name": "Shrimp (aggregate imports)",
+            "name": "Shrimp  ",
             "category": "Seafood",
             "supplier": "—",
             "risk30": {
@@ -632,29 +662,19 @@ def build_dashboard_payload() -> dict[str, Any]:
         }
     )
 
-    # Alerts: no pipeline yet — show neutral "—" so no fake numbers reach users.
-    alerts_placeholder = {
-        "key": "alerts",
-        "label": "Active Alerts",
-        "value": "—",
-        "subtext": "Alert monitoring coming soon",
-    }
-    placeholder_sections.append("alerts")
-
     overview = [
         {
             "key": "risk",
-            "label": "Overall Risk Level",
+            "label": "Supply Health Index",
             "value": overall_level,
             "subtext": overall_sub,
         },
         {
             "key": "products",
-            "label": "Monitored Products",
-            "value": str(len(products)),
-            "subtext": "Active products in supply risk monitoring",
+            "label": "Monitored Regions",
+            "value": "5",
+            "subtext": "Ecuador, India, Indonesia, Thailand, Vietnam",
         },
-        alerts_placeholder,
     ]
 
     evidence: list[dict[str, Any]] = news_items

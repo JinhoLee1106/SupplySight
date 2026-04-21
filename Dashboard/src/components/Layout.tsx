@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router';
-import { LayoutDashboard, FileText, Database, Shield, Bell, Settings, User, ChevronRight, Package } from 'lucide-react';
+import { LayoutDashboard, Database, Shield, Bell, Settings, User, ChevronRight, Package } from 'lucide-react';
 
 export function Layout() {
   const location = useLocation();
@@ -7,8 +7,7 @@ export function Layout() {
   const navItems = [
     { path: '/', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/products', label: 'Products', icon: Package },
-    { path: '/rules', label: 'Rules', icon: Shield },
-    { path: '/reports', label: 'Reports', icon: FileText },
+    { path: '/rules', label: 'Metrics', icon: Shield },
     { path: '/database', label: 'Database', icon: Database },
   ];
 

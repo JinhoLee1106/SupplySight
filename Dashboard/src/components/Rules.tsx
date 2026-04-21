@@ -1,36 +1,64 @@
 import { Shield, Brain, Database, TrendingDown, DollarSign, BarChart3, Droplets } from 'lucide-react';
 
-const SCORE_BANDS = [
-  { label: 'Low', range: '1 – 24', color: 'text-green-700', bg: 'bg-green-50', border: 'border-green-200', description: 'Supply conditions stable. No action required.' },
-  { label: 'Medium', range: '25 – 49', color: 'text-yellow-700', bg: 'bg-yellow-50', border: 'border-yellow-200', description: 'Mild stress signals. Monitor weekly; consider ordering slightly early.' },
-  { label: 'High', range: '50 – 74', color: 'text-orange-700', bg: 'bg-orange-50', border: 'border-orange-200', description: 'Significant supply pressure. Increase order quantity before next cycle.' },
-  { label: 'Critical', range: '75 – 100', color: 'text-red-700', bg: 'bg-red-50', border: 'border-red-200', description: 'Acute shortage risk. Place emergency order and identify backup suppliers immediately.' },
+const SHI_BANDS = [
+  {
+    label: 'Critical',
+    range: '0.0 – 2.5',
+    color: 'text-red-700',
+    bg: 'bg-red-50',
+    border: 'border-red-200',
+    description: 'Acute supply disruption risk. Place emergency order and contact backup suppliers immediately.',
+  },
+  {
+    label: 'At Risk',
+    range: '2.6 – 5.0',
+    color: 'text-orange-700',
+    bg: 'bg-orange-50',
+    border: 'border-orange-200',
+    description: 'Significant supply pressure. Increase order quantity before next procurement cycle.',
+  },
+  {
+    label: 'Moderate',
+    range: '5.1 – 7.5',
+    color: 'text-yellow-700',
+    bg: 'bg-yellow-50',
+    border: 'border-yellow-200',
+    description: 'Mild stress signals detected. Monitor weekly; consider ordering slightly early.',
+  },
+  {
+    label: 'Healthy',
+    range: '7.6 – 10.0',
+    color: 'text-green-700',
+    bg: 'bg-green-50',
+    border: 'border-green-200',
+    description: 'Supply conditions stable. No action required.',
+  },
 ];
 
 const FEATURES = [
-  { icon: TrendingDown, label: 'Monthly import volume', detail: 'Total US shrimp imports (HS 030616 + 030617) from the Census Bureau — the primary supply signal.' },
-  { icon: BarChart3, label: '6-month import z-score', detail: 'How many standard deviations current volume is above or below the 6-month rolling mean. Negative z-scores drive the risk score up.' },
-  { icon: BarChart3, label: '3-month import std dev', detail: 'Rolling volatility of import volumes. Higher volatility increases uncertainty and the risk score.' },
-  { icon: TrendingDown, label: 'Month-over-month change', detail: 'Percentage change in imports from the prior month. Sharp drops compound the shortage signal.' },
-  { icon: TrendingDown, label: 'Year-over-year change', detail: 'Long-run import trend; seasonal baseline correction.' },
-  { icon: DollarSign, label: 'FAO price index', detail: 'FAO shrimp price index value. Elevated prices (above the training median of ~80) add price-stress to the score.' },
-  { icon: Droplets, label: 'Oil price (daily adjustment)', detail: 'Brent crude oil price used in the formula adjustment. High oil raises shipping costs and bumps the score by up to ±15 points.' },
+  { icon: TrendingDown, label: 'Monthly import volume', detail: 'Total US shrimp imports (HS 030616 + 030617) from the Census Bureau — the primary supply signal. Lower volumes push the Supply Health Index down.' },
+  { icon: BarChart3, label: '6-month import z-score', detail: 'How many standard deviations current volume is above or below the 6-month rolling mean. Negative z-scores are the strongest downward driver of the Supply Health Index.' },
+  { icon: BarChart3, label: '3-month import std dev', detail: 'Rolling volatility of import volumes. Higher volatility increases uncertainty and lowers the Supply Health Index.' },
+  { icon: TrendingDown, label: 'Month-over-month change', detail: 'Percentage change in imports from the prior month. Sharp drops compound the shortage signal and reduce the index.' },
+  { icon: TrendingDown, label: 'Year-over-year change', detail: 'Long-run import trend; used for seasonal baseline correction.' },
+  { icon: DollarSign, label: 'FAO price index', detail: 'FAO shrimp price index value. Elevated prices (above the training median of ~80) signal supply tightness and lower the Supply Health Index.' },
+  { icon: Droplets, label: 'Oil price (daily adjustment)', detail: 'Brent crude oil price used in the formula adjustment. High oil raises shipping costs and can shift the index by up to ±1.5 points.' },
 ];
 
 const RULES = [
   {
     id: 1,
     icon: Shield,
-    name: 'High Risk Threshold',
-    description: 'Score ≥ 50 triggers a High alert. Recommendation: increase order quantity before the next procurement cycle.',
+    name: 'At Risk Threshold',
+    description: 'Supply Health Index ≤ 5.0 triggers an At Risk alert. Recommendation: increase order quantity before the next procurement cycle.',
     category: 'Model Rule',
     status: 'Active',
   },
   {
     id: 2,
     icon: Shield,
-    name: 'Critical Risk Threshold',
-    description: 'Score ≥ 75 triggers a Critical alert. Recommendation: place an emergency order and contact backup suppliers within 2 days.',
+    name: 'Critical Threshold',
+    description: 'Supply Health Index ≤ 2.5 triggers a Critical alert. Recommendation: place an emergency order and contact backup suppliers within 2 days.',
     category: 'Model Rule',
     status: 'Active',
   },
@@ -38,7 +66,7 @@ const RULES = [
     id: 3,
     icon: Shield,
     name: 'Negative z-score signal',
-    description: 'Import volume below the 6-month average (z-score < 0) is the strongest single predictor of supply stress. Each unit of z-score below zero contributes directly to the base score.',
+    description: 'Import volume below the 6-month average (z-score < 0) is the strongest single predictor of supply stress and the primary driver pushing the Supply Health Index down.',
     category: 'Feature Rule',
     status: 'Active',
   },
@@ -46,7 +74,7 @@ const RULES = [
     id: 4,
     icon: Shield,
     name: 'Price stress signal',
-    description: 'When the FAO shrimp price index exceeds the training median (~80), the excess adds price-stress weight to the monthly base score.',
+    description: 'When the FAO shrimp price index exceeds the training median (~80), the excess signals supply tightness and contributes to a lower Supply Health Index.',
     category: 'Feature Rule',
     status: 'Active',
   },
@@ -58,8 +86,8 @@ export function Rules() {
 
       {/* Header */}
       <div>
-        <h1 className="text-slate-900 mb-1">Model & Rules</h1>
-        <p className="text-slate-600">How SupplySight calculates shrimp supply risk scores</p>
+        <h1 className="text-slate-900 mb-1">Metrics</h1>
+        <p className="text-slate-600">How SupplySight calculates the Supply Health Index for shrimp</p>
       </div>
 
       {/* Model explainer card */}
@@ -69,23 +97,23 @@ export function Rules() {
             <Brain className="w-6 h-6 text-blue-600" />
           </div>
           <div>
-            <h2 className="text-slate-900 text-lg font-semibold">Supply Risk Regression Model</h2>
+            <h2 className="text-slate-900 text-lg font-semibold">Supply Health Index Model</h2>
             <p className="text-slate-500 text-xs">Version 8 · trained through Jan 2025 · architecture: monthly linear head + oil/sentiment formula adjustment</p>
           </div>
         </div>
 
         <p className="text-slate-600 text-sm leading-relaxed">
           Every month, the model receives the latest US shrimp import data and the FAO price index,
-          computes a <strong>base score (1–100)</strong> from a linear regression head, then applies a small
-          deterministic <strong>formula adjustment</strong> driven by oil price (a proxy for shipping costs).
-          The final clipped score determines the risk band shown on the dashboard.
+          then computes a <strong>Supply Health Index (0 – 10)</strong> — where <strong>10 is fully healthy</strong> and <strong>0 indicates acute supply disruption risk</strong>.
+          The index is derived from a linear regression head with a small deterministic <strong>formula adjustment</strong> driven by oil price
+          (a proxy for shipping costs). The final value determines the health band shown on the dashboard.
         </p>
 
-        {/* Score bands */}
+        {/* SHI bands */}
         <div>
-          <h3 className="text-slate-800 font-medium text-sm mb-3">Score bands</h3>
+          <h3 className="text-slate-800 font-medium text-sm mb-3">Supply Health Index bands</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {SCORE_BANDS.map((b) => (
+            {SHI_BANDS.map((b) => (
               <div key={b.label} className={`${b.bg} border ${b.border} rounded-lg p-3`}>
                 <div className="flex items-center justify-between mb-1">
                   <span className={`font-semibold text-sm ${b.color}`}>{b.label}</span>

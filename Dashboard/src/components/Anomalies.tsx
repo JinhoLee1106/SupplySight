@@ -43,7 +43,7 @@ export function AnomalyPanel({ anomalies, loading }: Props) {
       <div className="flex items-center gap-2 mb-4">
         <AlertTriangle className="w-4 h-4 text-slate-500" />
         <h2 className="text-sm font-semibold text-slate-700">Anomalies</h2>
-        <span className="text-xs text-slate-400 ml-1">— 60-day avg vs 3-year baseline, |z| &gt; 1</span>
+        <span className="text-xs text-slate-400 ml-1">— 60-day avg vs 3-year baseline</span>
       </div>
 
       {entries.length === 0 ? (

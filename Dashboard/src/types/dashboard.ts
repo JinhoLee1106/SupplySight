@@ -33,15 +33,17 @@ export interface OverviewMetricDTO {
 
 export interface TrendPointDTO {
   date: string;
-  shrimp: number;
+  shrimp?: number;
   monthlyImport?: number | null;
   priceIndex?: number | null;
 }
 
 export type EvidenceIconType = 'globe' | 'trending' | 'file' | 'map';
+export type EvidenceIconColor = 'green' | 'red' | 'neutral';
 
 export interface EvidenceItemDTO {
   iconType: EvidenceIconType;
+  iconColor?: EvidenceIconColor;
   title: string;
   description: string;
   source: string;

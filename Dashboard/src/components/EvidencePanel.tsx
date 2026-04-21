@@ -1,5 +1,5 @@
 import { FileText, Globe, TrendingUp, MapPin } from 'lucide-react';
-import type { EvidenceItemDTO, EvidenceIconType } from '../types/dashboard';
+import type { EvidenceItemDTO, EvidenceIconType, EvidenceIconColor } from '../types/dashboard';
 
 function iconFor(type: EvidenceIconType) {
   switch (type) {
@@ -13,6 +13,12 @@ function iconFor(type: EvidenceIconType) {
     default:
       return FileText;
   }
+}
+
+function getIconStyle(color?: EvidenceIconColor) {
+  if (color === 'green') return { bg: 'bg-green-50', icon: 'text-green-600' };
+  if (color === 'red') return { bg: 'bg-red-50', icon: 'text-red-600' };
+  return { bg: 'bg-blue-50', icon: 'text-blue-600' };
 }
 
 function getImpactColor(impact: string) {
@@ -54,9 +60,9 @@ export function EvidencePanel({ items, loading }: EvidencePanelProps) {
   return (
     <div className="bg-white border border-slate-200 rounded-lg">
       <div className="p-5 border-b border-slate-200">
-        <h2 className="text-slate-900 mb-1">Risk Evidence</h2>
+        <h2 className="text-slate-900 mb-1">Relevant News</h2>
         <p className="text-slate-600 text-sm">
-          AI-evaluated industry news · click any article to read the source
+          click any article to read the source
         </p>
       </div>
       <div className="p-4 space-y-3 max-h-[500px] overflow-y-auto">
@@ -65,6 +71,7 @@ export function EvidencePanel({ items, loading }: EvidencePanelProps) {
         ) : (
           evidenceItems.map((item, index) => {
             const Icon = iconFor(item.iconType);
+            const { bg, icon } = getIconStyle(item.iconColor);
             const Tag = item.url ? 'a' : 'div';
             const linkProps = item.url
               ? { href: item.url, target: '_blank', rel: 'noopener noreferrer' }
@@ -73,8 +80,8 @@ export function EvidencePanel({ items, loading }: EvidencePanelProps) {
               <Tag key={index} {...linkProps} className="block">
                 <div className="border border-slate-200 rounded-lg p-4 hover:border-blue-300 hover:bg-slate-50 transition-colors cursor-pointer">
                   <div className="flex items-start gap-3">
-                    <div className="bg-blue-50 p-2 rounded-lg flex-shrink-0">
-                      <Icon className="w-4 h-4 text-blue-600" />
+                    <div className={`${bg} p-2 rounded-lg flex-shrink-0`}>
+                      <Icon className={`w-4 h-4 ${icon}`} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2 mb-2">
@@ -87,9 +94,6 @@ export function EvidencePanel({ items, loading }: EvidencePanelProps) {
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-blue-600">{item.source}</span>
                         <div className="flex items-center gap-2 text-slate-500">
-                          {item.relevancyScore !== undefined && (
-                            <span>Relevance {item.relevancyScore}/100</span>
-                          )}
                           <span>{item.date}</span>
                         </div>
                       </div>

@@ -4,7 +4,6 @@ import { RiskOverview } from './RiskOverview';
 import { TrendVisualization } from './TrendVisualization';
 import { EvidencePanel } from './EvidencePanel';
 import { DecisionSupportPanel } from './DecisionSupportPanel';
-import { AnomalyPanel } from './Anomalies';
 import { useDashboard } from '../hooks/useDashboard';
 
 export function Dashboard() {
@@ -14,7 +13,7 @@ export function Dashboard() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const products = [
-      { id: "shrimp", name: "Shrimp (aggregate imports)", category: "Seafood" },
+      { id: "shrimp", name: "Shrimp", category: "Seafood" },
     { id: "salmon", name: "Salmon", category: "Seafood" },
     { id: "tuna", name: "Tuna", category: "Seafood" },
     { id: "whitefish", name: "Whitefish", category: "Seafood" },
@@ -26,10 +25,10 @@ export function Dashboard() {
 
   const productName = selectedProduct?.name?.toLowerCase() || "shrimp";
 
-  const simpleTrend = simpleData.map(d => ({
-    date: d.date,
-    monthlyImport: d.monthly_import,
-    priceIndex: d.price_index_value,
+  const simpleTrend = simpleData.map((d) => ({
+    date: d.date as string,
+    monthlyImport: d.monthly_import as number | null,
+    priceIndex: d.price_index_value as number | null,
   }));
 
   useEffect(() => {
@@ -52,8 +51,8 @@ export function Dashboard() {
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-slate-900 mb-1">Risk Dashboard</h1>
-          <p className="text-slate-600">Monitor and forecast supply chain risks across your product portfolio</p>
+          <h1 className="text-slate-900 mb-1">Dashboard</h1>
+          <p className="text-slate-600">Monitor and forecast supply chain risks</p>
 
           {error && (
             <div className="mt-3 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
@@ -94,12 +93,11 @@ export function Dashboard() {
 
       {productName.includes("shrimp") ? (
         <>
-          <RiskOverview metrics={data?.overview ?? null} loading={loading} />
-          <AnomalyPanel anomalies={data?.anomalies} loading={loading} />
+          <RiskOverview metrics={data?.overview ?? null} anomalies={data?.anomalies} loading={loading} />
 
           <div className="grid grid-cols-3 gap-6">
             <div className="col-span-2 space-y-6">
-              <TrendVisualization points={productName.includes("shrimp") ? data?.trend ?? null : simpleTrend} loading={productName.includes("shrimp") ? loading : simpleLoading}/>
+              <TrendVisualization points={data?.trend ?? null} loading={loading} />
               <DecisionSupportPanel recommendations={data?.recommendations ?? null} loading={loading} />
             </div>
             <div className="col-span-1 space-y-6">
@@ -108,17 +106,13 @@ export function Dashboard() {
           </div>
         </>
       ) : (
-        <>
-          <div className="bg-white p-6 rounded-xl shadow">
-            <h2 className="text-lg mb-4"></h2>
-
-            {simpleLoading ? (
-              <p>Loading...</p>
-            ) : (
-                <TrendVisualization points={simpleTrend} loading={false} />
-            )}
-          </div>
-        </>
+        <div className="space-y-6">
+          <TrendVisualization
+            points={simpleTrend}
+            loading={simpleLoading}
+            showHealthIndex={false}
+          />
+        </div>
       )}
     </div>
   );
