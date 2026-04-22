@@ -109,7 +109,7 @@ export function RiskOverview({ metrics, anomalies, loading }: RiskOverviewProps)
                 <Icon className={`w-5 h-5 ${color}`} />
               </div>
               {metric.key === 'risk' && (
-                <span className="text-xs text-slate-400 font-medium">View model ›</span>
+                <span className="text-xs text-slate-400 font-medium">View metric ›</span>
               )}
             </div>
             <div className="space-y-1">

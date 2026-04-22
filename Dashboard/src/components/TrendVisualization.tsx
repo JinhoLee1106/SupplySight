@@ -19,11 +19,22 @@ const ALL_VIEWS: { key: View; label: string }[] = [
   { key: 'price', label: 'Price Index' },
 ];
 
-const RECALL = {
-  date: '2025-08',
-  url: 'https://www.fda.gov/safety/major-product-recalls/2025-recalls-frozen-shrimp-products-associated-cesium-137-contamination-pt-bahari-makmur-sejati-due',
-  title: '2025 Recalls of Frozen Shrimp Products Associated with Cesium-137 Contamination from PT. Bahari Makmur Sejati Due to Potential Safety Concerns',
-};
+const ALERTS: { date: string; url: string; title: string }[] = [
+  {
+    date: '2025-08',
+    url: 'https://www.fda.gov/safety/major-product-recalls/2025-recalls-frozen-shrimp-products-associated-cesium-137-contamination-pt-bahari-makmur-sejati-due',
+    title: '2025 Recalls of Frozen Shrimp Products Associated with Cesium-137 Contamination from PT. Bahari Makmur Sejati Due to Potential Safety Concerns',
+  },
+  {
+    date: '2026-03',
+    url: 'https://seafoodnews.com/Story/1336206/Crude-Oil-Set-for-Record-Daily-Surge-as-Iran-War-Enters-Tenth-Day',
+    title: 'Crude Oil Set for Record Daily Surge as Iran War Enters Tenth Day',
+  },
+];
+
+function alertForDate(date: string) {
+  return ALERTS.find((a) => a.date === date) ?? null;
+}
 
 function fmtImport(v: number) {
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M lbs`;
@@ -38,10 +49,10 @@ function shiLabel(shi: number) {
   return 'Critical';
 }
 
-function RecallDot(props: any) {
+function AlertDot(props: any) {
   const { cx, cy, payload } = props;
   if (!cx || !cy) return null;
-  if (payload?.date === RECALL.date) {
+  if (alertForDate(payload?.date)) {
     return (
       <g>
         <circle
@@ -69,7 +80,7 @@ interface PinnedPoint {
 }
 
 function PinnedTooltip({ point, onClose }: { point: PinnedPoint; onClose: () => void }) {
-  const isRecall = point.date === RECALL.date;
+  const alert = alertForDate(point.date);
   return (
     <div
       style={{
@@ -79,7 +90,7 @@ function PinnedTooltip({ point, onClose }: { point: PinnedPoint; onClose: () => 
         transform: 'translate(-50%, calc(-100% - 14px))',
         zIndex: 20,
         pointerEvents: 'auto',
-        maxWidth: '280px',
+        maxWidth: '420px',
       }}
     >
       <div className="bg-white border border-slate-300 rounded-lg shadow-lg p-3" style={{ fontSize: '12px' }}>
@@ -90,15 +101,15 @@ function PinnedTooltip({ point, onClose }: { point: PinnedPoint; onClose: () => 
         <p className="font-medium text-slate-800">
           {point.value.toFixed(1)} — {shiLabel(point.value)}
         </p>
-        {isRecall && (
+        {alert && (
           <a
-            href={RECALL.url}
+            href={alert.url}
             target="_blank"
             rel="noopener noreferrer"
             className="text-blue-600 underline block mt-2 leading-snug"
             style={{ fontSize: '11px' }}
           >
-            ⚠ {RECALL.title}
+            ⚠ {alert.title}
           </a>
         )}
       </div>
@@ -127,8 +138,8 @@ function HoverTooltip({ active, payload, label }: any) {
     <div style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '12px', padding: '8px 12px' }}>
       <p className="text-slate-500 mb-1">{label}</p>
       <p className="font-medium text-slate-800">{value?.toFixed(1)} — {shiLabel(value)}</p>
-      {label === RECALL.date && (
-        <p className="text-red-500 text-xs mt-1">⚠ Click to see recall info</p>
+      {alertForDate(label) && (
+        <p className="text-red-500 text-xs mt-1">⚠ Click to see alert info</p>
       )}
     </div>
   );
@@ -151,12 +162,32 @@ export function TrendVisualization({ points, loading, showHealthIndex = true }: 
     );
   }
 
-  const data = (points ?? []).map((p) => ({
+  const FORECAST: { date: string; risk: number }[] = [
+    { date: '2026-03', risk: 3.1 },
+    { date: '2026-04', risk: 3.8 },
+    { date: '2026-05', risk: 2.7 },
+    { date: '2026-06', risk: 3.1},
+  ];
+
+  const apiData = (points ?? []).map((p) => ({
     date: p.date,
     risk: p.shrimp != null ? (100 - p.shrimp) / 10 : undefined,
+    riskDashed: undefined as number | undefined,
     imports: p.monthlyImport ?? undefined,
     price: p.priceIndex ?? undefined,
   }));
+
+  const forecastData = FORECAST.map(({ date, risk }, i) => ({
+    date,
+    // solid line carries 2026-03 and 2026-04; 2026-05 is dashed-only
+    risk: i < FORECAST.length - 2 ? risk : undefined,
+    // dashed line carries the last two forecast points (overlap at 2026-04)
+    riskDashed: i >= FORECAST.length - 3 ? risk : undefined,
+    imports: undefined as number | undefined,
+    price: undefined as number | undefined,
+  }));
+
+  const data = [...apiData, ...forecastData];
 
   const xTicks = data.map((d) => d.date).filter((_, i) => i % 6 === 0);
 
@@ -217,8 +248,21 @@ export function TrendVisualization({ points, loading, showHealthIndex = true }: 
                       name="Supply Health Index"
                       stroke="#3b82f6"
                       strokeWidth={2}
-                      dot={<RecallDot />}
+                      dot={<AlertDot />}
                       activeDot={{ r: 4, style: { cursor: 'pointer' } }}
+                      connectNulls={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="riskDashed"
+                      name="Forecast"
+                      stroke="#3b82f6"
+                      strokeWidth={2}
+                      strokeDasharray="5 4"
+                      dot={{ r: 2, fill: '#3b82f6' }}
+                      activeDot={{ r: 4 }}
+                      connectNulls={false}
+                      legendType="none"
                     />
                   </>
                 )}
