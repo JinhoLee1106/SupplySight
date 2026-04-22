@@ -1,0 +1,2 @@
+threshold,inclusive,n_rows,tp,fp,tn,fn,precision,recall,f1,accuracy
+60.0,False,365,141,0,153,71,1.0,0.42924528301886794,0.6006600660066006,0.6684931506849315

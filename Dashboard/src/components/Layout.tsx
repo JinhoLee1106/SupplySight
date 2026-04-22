@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router';
-import { LayoutDashboard, Database, Shield, Bell, Settings, User, ChevronRight, Package } from 'lucide-react';
+import { LayoutDashboard, Database, Shield, Bell, Settings, User, ChevronRight, Package, Bot } from 'lucide-react';
 
 export function Layout() {
   const location = useLocation();
@@ -8,6 +8,7 @@ export function Layout() {
     { path: '/', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/products', label: 'Products', icon: Package },
     { path: '/rules', label: 'Metrics', icon: Shield },
+    { path: '/agents', label: 'Agents', icon: Bot },
     { path: '/database', label: 'Database', icon: Database },
   ];
 
